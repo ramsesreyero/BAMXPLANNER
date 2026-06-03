@@ -423,7 +423,7 @@ npm run dev    # Inicia en modo desarrollo con HMR
 
 | Término | Significado |
 |---------|-------------|
-| **CEDIS** | Centro de Distribución → almacén central en C. Iturbide 1407 |
+| **CEDIS** | Centro de Distribución almacén central |
 | **Colonia** | Zona urbana o rural donde viven familias beneficiarias |
 | **Despensa** | Paquete de alimentos (~15kg: 8kg abarrotes + 7kg fruta) |
 | **Ruta de la Caridad** | Entrega individual a beneficiarios específicos (cada 15 días) |
