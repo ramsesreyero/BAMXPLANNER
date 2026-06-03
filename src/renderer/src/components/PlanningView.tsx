@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
     ChevronRight, Plus, Truck, Users, MapPin, 
     Clock, CheckCircle2, Trash2, ArrowRight, Search, Filter, 
@@ -7,11 +8,9 @@ import {
 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { MonthlyScheduler, MonthlyPlan } from '../utils/monthlyScheduler'
-import { RouteStop, GeneticRouting } from '../utils/geneticRouting'
 import ConfirmModal from './ConfirmModal'
 import { PlanningHeader } from './planning/PlanningHeader'
 import { PlanningStats } from './planning/PlanningStats'
-import { SimulationModal } from './planning/SimulationModal'
 import { MonthlyPlanModal } from './planning/MonthlyPlanModal'
 import { CalendarGrid } from './planning/CalendarGrid'
 import { exportRouteToPDF } from '../utils/jsPDFRouteExport'
@@ -28,13 +27,11 @@ const PlanningView = () => {
     const [viewMode, setViewMode] = useState<'calendar' | 'day'>('calendar')
     const [monthSummary, setMonthSummary] = useState<any[]>([])
 
-    // Estado para el mapa y simulacion real
-    const [showPreviewMap, setShowPreviewMap] = useState(false)
-    const [optimizedRoute, setOptimizedRoute] = useState<RouteStop[]>([])
-    const [isOptimizing, setIsOptimizing] = useState(false)
+
 
     const [isRouteModalOpen, setIsRouteModalOpen] = useState(false)
     const [routeFormData, setRouteFormData] = useState({
+        date: '',
         truck_id: '',
         driver_id: '',
         type: 'Entrega'
@@ -64,6 +61,13 @@ const PlanningView = () => {
     const [isMonthlyModalOpen, setIsMonthlyModalOpen] = useState(false)
     const [monthlyPlan, setMonthlyPlan] = useState<MonthlyPlan | null>(null)
     const [isGeneratingMonthly, setIsGeneratingMonthly] = useState(false)
+    const [selectedFilters, setSelectedFilters] = useState({
+        supermarkets: true,
+        colonies: true,
+        beneficiaries: true,
+        institutions: true
+    })
+    const [showFilters, setShowFilters] = useState(false)
     
     // Seleccion de mes/ano para la planeacion
     const location = useLocation()
@@ -97,7 +101,7 @@ const PlanningView = () => {
             if (stopsA > 0 || stopsB > 0) activeDays++;
             
             totalStops += stopsA + stopsB;
-            totalDistance += (day.truckA.stats?.distance || 0) + (day.truckB.stats?.distance || 0);
+            totalDistance += (day.truckA.stats?.distanceKm || 0) + (day.truckB.stats?.distanceKm || 0);
         });
 
         return {
@@ -142,6 +146,19 @@ const PlanningView = () => {
             loadData()
         } else {
             loadMonthSummary()
+            const loadLogistics = async () => {
+                try {
+                    const [trk, drv] = await Promise.all([
+                        window.api.db.list('trucks'),
+                        window.api.db.list('drivers')
+                    ])
+                    setTrucks(trk)
+                    setDrivers(drv)
+                } catch (e) {
+                    console.error('Error loading logistics data in calendar mode:', e)
+                }
+            }
+            loadLogistics()
         }
     }, [selectedDate, viewMode, planMonth, planYear])
 
@@ -171,6 +188,7 @@ const PlanningView = () => {
             return
         }
         setRouteFormData({
+            date: selectedDate,
             truck_id: trucks[0].id.toString(),
             driver_id: drivers[0].id.toString(),
             type: 'Entrega'
@@ -182,12 +200,16 @@ const PlanningView = () => {
         e.preventDefault()
         try {
             await window.api.planning.createRoute({
-                date: selectedDate,
+                date: routeFormData.date || selectedDate,
                 truck_id: parseInt(routeFormData.truck_id),
                 driver_id: parseInt(routeFormData.driver_id),
                 type: routeFormData.type
             })
             setIsRouteModalOpen(false)
+            if (routeFormData.date) {
+                setSelectedDate(routeFormData.date)
+            }
+            setViewMode('day')
             loadData()
         } catch (error) {
             console.error('Error creating route:', error)
@@ -204,16 +226,24 @@ const PlanningView = () => {
     }
 
     const handleVincularSugerencias = async (routeId: number) => {
-        if (suggestions.length === 0) return
+        const activeSuggestions = suggestions.filter(s => {
+            if (s.type === 'Supermercado' && !selectedFilters.supermarkets) return false;
+            if (s.type === 'Colonia' && !selectedFilters.colonies) return false;
+            if (s.type === 'Institución' && !selectedFilters.institutions) return false;
+            return true;
+        });
+
+        if (activeSuggestions.length === 0) return
         try {
             const targetRoute = routes.find(r => r.id === routeId)
             let currentSequence = targetRoute && targetRoute.stops ? targetRoute.stops.length : 0
 
-            for (const suggestion of suggestions) {
+            for (const suggestion of activeSuggestions) {
                 currentSequence++
                 await window.api.planning.addStop({
                     route_id: routeId,
-                    stop_type: 'Colonia',
+                    stop_type: suggestion.type === 'Supermercado' ? 'Supermercado' :
+                               suggestion.type === 'Institución' ? 'Institución' : 'Colonia',
                     stop_id: suggestion.id,
                     sequence_order: currentSequence
                 })
@@ -276,70 +306,26 @@ const PlanningView = () => {
         setManualAddData({ type, id: options[0]?.id?.toString() || '' })
     }
 
+    const filteredSuggestions = suggestions.filter((s) => {
+        if (s.type === 'Supermercado' && !selectedFilters.supermarkets) return false;
+        if (s.type === 'Colonia' && !selectedFilters.colonies) return false;
+        if (s.type === 'Institución' && !selectedFilters.institutions) return false;
+        return true;
+    });
+
     const dayName = new Intl.DateTimeFormat('es-MX', {
         weekday: 'long',
         day: 'numeric',
         month: 'long'
     }).format(new Date(selectedDate + 'T12:00:00'))
 
-    const handleOpenSimulation = async () => {
-        setIsOptimizing(true);
-        setShowPreviewMap(true);
-        
-        try {
-            // 1. Preparar paradas (Almacen + Sugerencias del dia)
-            const warehouse = { id: 0, name: 'CEDIS BAMX', type: 'warehouse' as const, demand: 0, lat: 27.4778508, lng: -99.4949839, truck: 'A' };
-            
-            const stops: RouteStop[] = [
-                warehouse,
-                ...suggestions.map((s, idx) => ({
-                    id: s.id,
-                    name: s.name,
-                    truck: 'A', // Forzar truck A para que MapVisualizer lo dibuje
-                    type: (s.type === 'Supermercado' ? 'supermarket' : 
-                           s.type === 'Institución' ? 'institution' : 'colony') as any,
-                    demand: s.type === 'Supermercado' ? 200 + (idx * 50) : -150 - (idx * 30),
-                    // Si no hay coordenadas reales, generamos unas cercanas a Nuevo Laredo para el demo
-                    lat: s.lat || (27.46 + (Math.random() * 0.04)),
-                    lng: s.lng || (-99.51 + (Math.random() * 0.04))
-                }))
-            ];
 
-            // Para que el GA regrese al almacen, lo duplicamos al final o el GA lo maneja?
-            // El GA de geneticRouting.ts agrega el almacen al inicio y fin automaticamente.
-
-            // 2. Crear matriz de distancias (Euclidiana simple para el GA interno)
-            const matrix = stops.map(s1 => 
-                stops.map(s2 => {
-                    const dx = (s1.lng || -99.4949) - (s2.lng || -99.4949);
-                    const dy = (s1.lat || 27.4778) - (s2.lat || 27.4778);
-                    return Math.sqrt(dx*dx + dy*dy) * 111; // aprox km
-                })
-            );
-
-            // 3. Ejecutar algoritmo genetico
-            const ga = new GeneticRouting({
-                stops,
-                distances: matrix,
-                truckCapacity: 1000,
-                popSize: 50,
-                numGenerations: 200
-            });
-
-            const result = ga.run();
-            setOptimizedRoute(result.route);
-        } catch (error) {
-            console.error("Error optimizando ruta para simulación:", error);
-        } finally {
-            setIsOptimizing(false);
-        }
-    };
 
     const handleGenerateMonthlyPlan = async () => {
         setIsGeneratingMonthly(true);
         setIsMonthlyModalOpen(true);
         try {
-            const [colonies, supermarkets, institutions, caridad, trucks, drivers, algoConfig, holidays] = await Promise.all([
+            const [colonies, supermarkets, institutions, caridad, trucks, drivers, algoConfig, holidays, cedisCoordsSetting] = await Promise.all([
                 window.api.db.list('colonies'),
                 window.api.db.list('supermarkets'),
                 window.api.db.list('institutions'),
@@ -347,25 +333,42 @@ const PlanningView = () => {
                 window.api.db.list('trucks'),
                 window.api.db.list('drivers'),
                 window.api.settings.get('algorithm_config'),
-                window.api.settings.get('non_working_days')
+                window.api.settings.get('non_working_days'),
+                window.api.settings.get('cedis_coords')
             ]);
 
             const gaConfig = algoConfig ? JSON.parse(algoConfig.value) : undefined;
             const nonWorkingDays = holidays ? JSON.parse(holidays.value).map((h: any) => h.date) : [];
+            // maxRoutesPerDay viene de la configuración de Ajustes > Algoritmo
+            const maxStopsPerTruck: number = gaConfig?.maxRoutesPerDay ?? 10;
+
+            // Leer coordenadas del CEDIS desde ajustes (C. Iturbide 1407, San José, 88230 Nuevo Laredo)
+            let cedisLat = 27.477850806886945;
+            let cedisLng = -99.49498391012905;
+            if (cedisCoordsSetting?.value) {
+                const parts = cedisCoordsSetting.value.split(',').map((p: string) => parseFloat(p.trim()));
+                if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                    cedisLat = parts[0];
+                    cedisLng = parts[1];
+                }
+            }
 
             const scheduler = new MonthlyScheduler({
                 startDate: `${planYear}-${planMonth + 1}-01`,
-                colonies,
-                supermarkets,
-                institutions,
-                caridad,
+                colonies: selectedFilters.colonies ? colonies : [],
+                supermarkets: selectedFilters.supermarkets ? supermarkets : [],
+                institutions: selectedFilters.institutions ? institutions : [],
+                caridad: selectedFilters.beneficiaries ? caridad : [],
                 trucks,
                 drivers,
                 gaConfig,
-                nonWorkingDays
+                nonWorkingDays,
+                cedisLat,
+                cedisLng,
+                maxStopsPerTruck
             });
 
-            const plan = scheduler.generate();
+            const plan = await scheduler.generate();
             setMonthlyPlan(plan);
         } catch (error) {
             console.error("Error generating monthly plan:", error);
@@ -373,6 +376,7 @@ const PlanningView = () => {
             setIsGeneratingMonthly(false);
         }
     };
+
 
     const handleConfirmMonthlyPlan = async () => {
         if (!monthlyPlan || !monthlyPlan.days.length) return;
@@ -404,21 +408,7 @@ const PlanningView = () => {
         }
     };
 
-    const handleSeedData = async () => {
-        if (confirm("¿Estás seguro? Esto borrará tus datos actuales y cargará los datos de prueba requeridos (Colonias, Beneficiarios, etc).")) {
-            setLoading(true);
-            try {
-                await window.api.planning.seedData();
-                await loadData();
-                alert("¡Datos de prueba cargados con éxito! Ahora puedes probar la auto-programación.");
-            } catch (error) {
-                console.error("Error seeding data:", error);
-                alert("Error al cargar datos de prueba.");
-            } finally {
-                setLoading(false);
-            }
-        }
-    };
+
 
     const removeStopFromDay = (dayIdx: number, truck: 'truckA' | 'truckB', stopIdx: number) => {
         if (!monthlyPlan) return;
@@ -477,21 +467,13 @@ const PlanningView = () => {
                     setSelectedDate={setSelectedDate}
                     setPlanMonth={setPlanMonth}
                     setPlanYear={setPlanYear}
-                    handleSeedData={handleSeedData}
                     setIsMonthlyModalOpen={setIsMonthlyModalOpen}
-                    handleOpenSimulation={handleOpenSimulation}
                     handleCreateRoute={handleCreateRoute}
                 />
                 <PlanningStats viewMode={viewMode} currentStats={currentStats} />
             </div>
 
-            {/* Modal de mapa de demostracion via portal */}
-            <SimulationModal
-                isOpen={showPreviewMap}
-                onClose={() => setShowPreviewMap(false)}
-                isOptimizing={isOptimizing}
-                optimizedRoute={optimizedRoute}
-            />
+
 
             {/* Modal de plan mensual via portal */}
             <MonthlyPlanModal
@@ -509,6 +491,8 @@ const PlanningView = () => {
                 reorderStopInDay={reorderStopInDay}
                 moveStopBetweenTrucks={moveStopBetweenTrucks}
                 removeStopFromDay={removeStopFromDay}
+                selectedFilters={selectedFilters}
+                setSelectedFilters={setSelectedFilters}
             />
 
             {/* Area de contenido principal: calendario o detalle del dia */}
@@ -529,13 +513,74 @@ const PlanningView = () => {
                             <h3 className="text-xl heading-premium text-slate-900 uppercase">
                                 Recomendaciones
                             </h3>
-                            <button className="p-2 text-slate-300 hover:text-slate-400">
+                            <button 
+                                onClick={() => setShowFilters(!showFilters)}
+                                className={`p-2 rounded-xl transition-all ${
+                                    showFilters 
+                                    ? 'bg-orange-50 text-orange-600' 
+                                    : 'text-slate-300 hover:text-slate-400 hover:bg-slate-50'
+                                }`}
+                            >
                                 <Filter size={18} />
                             </button>
                         </div>
 
+                        {showFilters && (
+                            <div className="mb-6 p-4 bg-slate-50/50 rounded-2xl border border-slate-200/60 space-y-3 animate-in slide-in-from-top duration-300">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                                    Filtrar por tipo:
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        onClick={() => setSelectedFilters(prev => ({ ...prev, supermarkets: !prev.supermarkets }))}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                                            selectedFilters.supermarkets
+                                            ? 'bg-orange-50 border-orange-200 text-orange-600'
+                                            : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <ShoppingCart size={12} />
+                                        Súper
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedFilters(prev => ({ ...prev, colonies: !prev.colonies }))}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                                            selectedFilters.colonies
+                                            ? 'bg-amber-50 border-amber-200 text-amber-600'
+                                            : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <MapPin size={12} />
+                                        Colonias
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedFilters(prev => ({ ...prev, institutions: !prev.institutions }))}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                                            selectedFilters.institutions
+                                            ? 'bg-blue-50 border-blue-200 text-blue-600'
+                                            : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <Building2 size={12} />
+                                        Inst.
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedFilters(prev => ({ ...prev, beneficiaries: !prev.beneficiaries }))}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                                            selectedFilters.beneficiaries
+                                            ? 'bg-purple-50 border-purple-200 text-purple-600'
+                                            : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <Users size={12} />
+                                        Caridad
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="space-y-4">
-                            {suggestions.length === 0 ? (
+                            {filteredSuggestions.length === 0 ? (
                                 <div className="text-center py-10 opacity-50">
                                     <MapPin size={32} className="mx-auto text-slate-200 mb-2" />
                                     <p className="text-xs font-bold text-slate-400 uppercase">
@@ -543,7 +588,7 @@ const PlanningView = () => {
                                     </p>
                                 </div>
                             ) : (
-                                suggestions
+                                filteredSuggestions
                                     .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
                                     .map((stop) => (
                                         <div
@@ -814,6 +859,22 @@ const PlanningView = () => {
                                                             </div>
                                                         ))}
 
+                                                        {route.stops && route.stops.length > 0 && (
+                                                            <div className="flex items-center space-x-10 relative">
+                                                                <div className="w-14 h-14 rounded-full bg-slate-900 text-white flex items-center justify-center font-black z-10 border-[6px] border-white shadow-2xl">
+                                                                    <Building2 size={20} />
+                                                                </div>
+                                                                <div className="flex-1 p-6 rounded-3xl bg-slate-900 text-white shadow-2xl">
+                                                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-1">
+                                                                        Retorno al Almacén
+                                                                    </p>
+                                                                    <p className="text-lg font-black tracking-tight">
+                                                                        CEDIS BAMX NUEVO LAREDO
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
                                                         <div className="flex items-center space-x-10 relative">
                                                             <div className="w-14 h-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-black z-10 border-[6px] border-white shadow-sm italic">
                                                                 <Plus size={20} />
@@ -920,8 +981,8 @@ const PlanningView = () => {
             )}
 
             {/* Modal de creacion de ruta */}
-            {isRouteModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+            {isRouteModalOpen && createPortal(
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-white/90 backdrop-blur-2xl rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.2)] border border-white/50 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-500">
                         <div className="p-10 border-b border-slate-100/50 relative bg-gradient-to-br from-white to-orange-50/30">
                             <div className="w-14 h-14 bg-orange-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-orange-600/30">
@@ -939,6 +1000,18 @@ const PlanningView = () => {
                             </button>
                         </div>
                         <form onSubmit={submitRouteForm} className="p-10 space-y-6">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                                    Fecha de la Ruta
+                                </label>
+                                <input
+                                    type="date"
+                                    required
+                                    value={routeFormData.date}
+                                    onChange={(e) => setRouteFormData({ ...routeFormData, date: e.target.value })}
+                                    className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900 cursor-pointer"
+                                />
+                            </div>
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
                                     Unidad Logística
@@ -1018,12 +1091,13 @@ const PlanningView = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* Modal para agregar parada */}
-            {isStopModalOpen && selectedSuggestion && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+            {isStopModalOpen && selectedSuggestion && createPortal(
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-white/90 backdrop-blur-2xl rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.2)] border border-white/50 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-500">
                         <div className="p-10 border-b border-slate-100/50 relative bg-gradient-to-br from-white to-orange-50/30">
                             <div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center mb-6 ring-1 ring-orange-200">
@@ -1092,7 +1166,8 @@ const PlanningView = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             <ConfirmModal
@@ -1104,8 +1179,8 @@ const PlanningView = () => {
             />
 
             {/* Modal para agregar parada manual */}
-            {isManualAddOpen && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+            {isManualAddOpen && createPortal(
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-white/90 backdrop-blur-2xl rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.2)] border border-white/50 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-500">
                         <div className="p-10 border-b border-slate-100/50 relative bg-gradient-to-br from-white to-slate-50">
                             <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center mb-6 shadow-xl">
@@ -1198,7 +1273,8 @@ const PlanningView = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     )

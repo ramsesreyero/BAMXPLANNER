@@ -70,7 +70,8 @@ export function initDB(): DbType {
     drivers: [
       'photo_url TEXT',
       'license_data TEXT',
-      'license_photo TEXT'
+      'license_photo TEXT',
+      'is_available INTEGER DEFAULT 1'
     ],
     trucks: [
       'capacity_kg REAL DEFAULT 0',
@@ -80,7 +81,8 @@ export function initDB(): DbType {
       'insurance_phone TEXT',
       'insurance_type TEXT DEFAULT "Cobertura amplia"',
       'loading_nip TEXT',
-      'is_refrigerated INTEGER DEFAULT 1'
+      'is_refrigerated INTEGER DEFAULT 1',
+      'is_available INTEGER DEFAULT 1'
     ]
   }
 
@@ -112,4 +114,12 @@ export function getDB(): DbType {
     throw new Error('Database not initialized. Call initDB() first.')
   }
   return db
+}
+
+export function closeDB(): void {
+  if (db) {
+    db.close()
+    db = null
+    console.log('Database connection closed successfully.')
+  }
 }

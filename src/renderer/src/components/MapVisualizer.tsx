@@ -80,6 +80,21 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
   const [selectedStopIndex, setSelectedStopIndex] = useState<number | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simIndex, setSimIndex] = useState(0);
+  const [cedisCoords, setCedisCoords] = useState("27.477850806886945,-99.49498391012905");
+
+  useEffect(() => {
+    const fetchCedis = async () => {
+      try {
+        const setting = await window.api.settings.get('cedis_coords');
+        if (setting?.value) {
+          setCedisCoords(setting.value);
+        }
+      } catch (e) {
+        console.error("Error loading CEDIS coordinates in MapVisualizer:", e);
+      }
+    };
+    fetchCedis();
+  }, []);
 
   // Calcular cargas acumuladas
   const stopsWithLoad = route.reduce((acc: any[], stop, idx) => {
@@ -123,7 +138,8 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
       if (route.length === 0) return;
       setIsLoadingRoute(true);
 
-      const baseLngLat = "-99.4949839,27.4778508";
+      const [latStr, lngStr] = cedisCoords.split(',').map(s => s.trim());
+      const baseLngLat = `${lngStr},${latStr}`;
       const controller = new AbortController();
 
       const fetchTruckRoute = async (truckLetter: 'A' | 'B') => {
@@ -163,9 +179,10 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
     fetchFullRoute();
   }, [route]);
 
+  const [cLat, cLng] = cedisCoords.split(',').map(s => parseFloat(s.trim()));
   const center: [number, number] = route.length > 0 && route[0].lat !== undefined && route[0].lng !== undefined
     ? [parseFloat(route[0].lat.toString()), parseFloat(route[0].lng.toString())]
-    : [27.4778508, -99.4949839];
+    : [cLat || 27.4778508, cLng || -99.4949839];
 
   const currentFocus = selectedStopIndex !== null ? stopsWithLoad[selectedStopIndex] : route[0];
 
@@ -312,6 +329,29 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
               lineCap="round"
             />
           )}
+
+          {(() => {
+            const [cLat, cLng] = cedisCoords.split(',').map(s => parseFloat(s.trim()));
+            if (!isNaN(cLat) && !isNaN(cLng)) {
+              return (
+                <Marker 
+                  position={[cLat, cLng]} 
+                  icon={getIcon('warehouse')}
+                >
+                  <Popup className="premium-popup">
+                    <div className="p-2 min-w-[200px]">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="bg-slate-900 text-white px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest">Base</span>
+                        <div className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
+                      </div>
+                      <h5 className="font-black text-slate-950 text-base mb-2 uppercase tracking-tight leading-tight">CEDIS BAMX (Almacén Central)</h5>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            }
+            return null;
+          })()}
 
           {polylineB.length > 0 && (
             <Polyline 

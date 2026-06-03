@@ -9,6 +9,8 @@ declare global {
         create: (table: string, data: any) => Promise<any>;
         update: (table: string, id: number, data: any) => Promise<any>;
         delete: (table: string, id: number) => Promise<any>;
+        exportDatabase: () => Promise<any>;
+        importDatabase: () => Promise<any>;
       };
       planning: {
         getSuggestions: (date: string) => Promise<any[]>;

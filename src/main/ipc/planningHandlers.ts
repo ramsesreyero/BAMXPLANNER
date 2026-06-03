@@ -1,21 +1,67 @@
 import { ipcMain } from 'electron'
 import { initDB } from '../database'
 
+function matchesDay(dbString: string | null | undefined, targetIndex: number): boolean {
+  if (!dbString) return false;
+  
+  const daysOfWeek = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+  const targetDay = daysOfWeek[targetIndex];
+  
+  // Normalize string: lowercase, remove accents, remove spaces
+  const normalized = dbString.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, '');
+    
+  const parts = normalized.split(',');
+  
+  for (const part of parts) {
+    if (part.includes('-')) {
+      const [startStr, endStr] = part.split('-');
+      const startIdx = daysOfWeek.indexOf(startStr);
+      const endIdx = daysOfWeek.indexOf(endStr);
+      
+      if (startIdx !== -1 && endIdx !== -1) {
+        if (startIdx <= endIdx) {
+          if (targetIndex >= startIdx && targetIndex <= endIdx) {
+            return true;
+          }
+        } else {
+          // Wrap around (e.g. sabado-lunes)
+          if (targetIndex >= startIdx || targetIndex <= endIdx) {
+            return true;
+          }
+        }
+      }
+    } else {
+      if (part === targetDay) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
 export function registerPlanningHandlers() {
   ipcMain.handle('planning:get-suggestions', async (_, date: string) => {
     const db = initDB()
-    const dayName = new Intl.DateTimeFormat('es-MX', { weekday: 'long' }).format(new Date(date))
+    const d = new Date(date + 'T12:00:00')
+    const dayIndex = d.getDay()
     
     const columns = db.prepare("PRAGMA table_info(colonies)").all() as any[]
     const hasRecoveryFee = columns.some(c => c.name === 'recovery_fee')
     
     const coloniesQuery = hasRecoveryFee 
-      ? "SELECT id, name, collection_point as address, 'Colonia' as type, lat, lng, recovery_fee FROM colonies WHERE preferred_day LIKE ?"
-      : "SELECT id, name, collection_point as address, 'Colonia' as type, lat, lng, 0 as recovery_fee FROM colonies WHERE preferred_day LIKE ?"
+      ? "SELECT id, name, collection_point as address, 'Colonia' as type, lat, lng, recovery_fee, preferred_day FROM colonies"
+      : "SELECT id, name, collection_point as address, 'Colonia' as type, lat, lng, 0 as recovery_fee, preferred_day FROM colonies"
     
-    const colonies = db.prepare(coloniesQuery).all(`%${dayName}%`)
-    const institutions = db.prepare("SELECT id, name, address, 'Institución' as type, lat, lng FROM institutions WHERE fixed_day LIKE ?").all(`%${dayName}%`)
-    const supermarkets = db.prepare("SELECT id, name, address, 'Supermercado' as type, lat, lng, is_foreign FROM supermarkets WHERE collection_days LIKE ?").all(`%${dayName}%`)
+    const allColonies = db.prepare(coloniesQuery).all() as any[]
+    const allInstitutions = db.prepare("SELECT id, name, address, 'Institución' as type, lat, lng, fixed_day FROM institutions").all() as any[]
+    const allSupermarkets = db.prepare("SELECT id, name, address, 'Supermercado' as type, lat, lng, is_foreign, collection_days FROM supermarkets").all() as any[]
+    
+    const colonies = allColonies.filter(c => matchesDay(c.preferred_day, dayIndex))
+    const institutions = allInstitutions.filter(i => matchesDay(i.fixed_day, dayIndex))
+    const supermarkets = allSupermarkets.filter(s => matchesDay(s.collection_days, dayIndex))
     
     return [...colonies, ...institutions, ...supermarkets]
   })
@@ -65,11 +111,11 @@ export function registerPlanningHandlers() {
 
       db.exec('PRAGMA foreign_keys = ON;');
 
-      const insertDriver = db.prepare('INSERT INTO drivers (name, available_days, max_hours_per_day) VALUES (?, ?, ?)');
+      const insertDriver = db.prepare('INSERT INTO drivers (name, available_days, max_hours_per_day, is_available) VALUES (?, ?, ?, 1)');
       insertDriver.run('Juan', 'Lunes,Martes,Miercoles,Jueves,Viernes,Sabado', 10);
       insertDriver.run('Pedro Gomez', 'Lunes,Martes,Miercoles,Jueves,Viernes,Sabado', 8);
 
-      const insertTruck = db.prepare('INSERT INTO trucks (name, capacity_kg, capacity_volume, insurance_policy, type) VALUES (?, ?, ?, ?, ?)');
+      const insertTruck = db.prepare('INSERT INTO trucks (name, capacity_kg, capacity_volume, insurance_policy, type, is_available) VALUES (?, ?, ?, ?, ?, 1)');
       insertTruck.run('Unidad Pesada BAMX (Grande)', 3000, 2500, 'POL-001-BAMX', 'Camión');
       insertTruck.run('Unidad Ligera 01', 1200, 1000, 'POL-002-LIG', 'Camioneta');
 
@@ -163,6 +209,10 @@ export function registerPlanningHandlers() {
       // Inyectar configuracion de CEDIS
       db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('cedis_address', 'C. Iturbide 1407, San José, 88230 Nuevo Laredo, Tamps.')
       db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('cedis_coords', '27.477850806886945, -99.49498391012905')
+      
+      db.prepare('DELETE FROM warehouse').run()
+      db.prepare('INSERT INTO warehouse (id, address, coordinates, opening_time, closing_time, avg_unloading_time) VALUES (1, ?, ?, ?, ?, ?)')
+        .run('C. Iturbide 1407, San José, 88230 Nuevo Laredo, Tamps.', '27.477850806886945, -99.49498391012905', '07:00', '18:00', 20)
     })
 
     transaction()

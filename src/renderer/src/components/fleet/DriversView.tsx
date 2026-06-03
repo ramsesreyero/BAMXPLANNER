@@ -22,7 +22,8 @@ const DriversView = () => {
     license_data: '',
     license_photo: '',
     available_days: 'Lunes,Martes,Miércoles,Jueves,Viernes',
-    max_hours_per_day: 8
+    max_hours_per_day: 8,
+    is_available: 1
   })
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'photo_url' | 'license_photo') => {
@@ -64,7 +65,8 @@ const DriversView = () => {
         license_data: '',
         license_photo: '',
         available_days: 'Lunes,Martes,Miércoles,Jueves,Viernes',
-        max_hours_per_day: 8
+        max_hours_per_day: 8,
+        is_available: 1
       })
       loadDrivers()
     } catch (error) {
@@ -102,7 +104,8 @@ const DriversView = () => {
               license_data: '',
               license_photo: '',
               available_days: 'Lunes,Martes,Miércoles,Jueves,Viernes',
-              max_hours_per_day: 8
+              max_hours_per_day: 8,
+              is_available: 1
             })
             setIsModalOpen(true)
           }}
@@ -167,7 +170,8 @@ const DriversView = () => {
                         license_data: driver.license_data || '',
                         license_photo: driver.license_photo || '',
                         available_days: driver.available_days,
-                        max_hours_per_day: driver.max_hours_per_day
+                        max_hours_per_day: driver.max_hours_per_day,
+                        is_available: driver.is_available ?? 1
                       })
                       setIsModalOpen(true)
                     }}
@@ -228,6 +232,29 @@ const DriversView = () => {
                   </div>
                 </div>
               )}
+              <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between relative z-10 mt-auto">
+                <div className="flex items-center gap-3">
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${driver.is_available !== 0 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                    {driver.is_available !== 0 ? 'Disponible' : 'Fuera de Servicio'}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      const newStatus = driver.is_available !== 0 ? 0 : 1;
+                      await window.api.db.update('drivers', driver.id, { is_available: newStatus });
+                      loadDrivers();
+                    }}
+                    className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 outline-none flex items-center ${
+                      driver.is_available !== 0 ? 'bg-emerald-500' : 'bg-slate-300'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${
+                        driver.is_available !== 0 ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
           ))
         )}
@@ -356,6 +383,19 @@ const DriversView = () => {
                     }
                     className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-violet-500/50 focus:ring-4 focus:ring-violet-500/5 transition-all outline-none font-bold text-slate-900"
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
+                    Disponibilidad del Chofer
+                  </label>
+                  <select
+                    value={formData.is_available}
+                    onChange={(e) => setFormData({ ...formData, is_available: parseInt(e.target.value) })}
+                    className="w-full px-6 py-4 rounded-2xl bg-white border border-slate-200 shadow-sm focus:border-violet-500/50 focus:ring-[4px] focus:ring-violet-500/10 transition-all outline-none font-bold text-slate-900 cursor-pointer"
+                  >
+                    <option value={1}>Activo / Disponible</option>
+                    <option value={0}>Fuera de Servicio (Inactivo)</option>
+                  </select>
                 </div>
               </div>
               <div className="pt-8 flex items-center gap-4">

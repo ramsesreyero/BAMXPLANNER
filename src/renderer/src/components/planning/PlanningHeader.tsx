@@ -1,5 +1,5 @@
 import React from 'react'
-import { Calendar, ChevronLeft, ChevronRight, Zap, Plus, Map as MapIcon } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, Zap, Plus } from 'lucide-react'
 
 interface PlanningHeaderProps {
   viewMode: 'calendar' | 'day'
@@ -11,9 +11,7 @@ interface PlanningHeaderProps {
   setSelectedDate: (date: string) => void
   setPlanMonth: (month: number) => void
   setPlanYear: (year: number) => void
-  handleSeedData: () => void
   setIsMonthlyModalOpen: (open: boolean) => void
-  handleOpenSimulation: () => void
   handleCreateRoute: () => void
 }
 
@@ -27,9 +25,7 @@ export const PlanningHeader: React.FC<PlanningHeaderProps> = ({
   setSelectedDate,
   setPlanMonth,
   setPlanYear,
-  handleSeedData,
   setIsMonthlyModalOpen,
-  handleOpenSimulation,
   handleCreateRoute
 }) => {
   const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -129,28 +125,11 @@ export const PlanningHeader: React.FC<PlanningHeaderProps> = ({
         </div>
         
         <button
-          onClick={handleSeedData}
-          className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all active:scale-95 flex items-center space-x-2 group/seed"
-          title="Inyectar Datos de Prueba"
-        >
-          <Zap size={20} className="text-orange-400" />
-          <span className="hidden xl:inline">Inyectar Datos</span>
-        </button>
-
-        <button
           onClick={() => setIsMonthlyModalOpen(true)}
           className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center space-x-2 group/month"
         >
           <Calendar size={20} className="group-hover/month:scale-110 transition-transform" />
           <span>Plan Mensual</span>
-        </button>
-
-        <button
-          onClick={handleOpenSimulation}
-          className="bg-white text-blue-600 px-6 py-4 rounded-2xl font-black shadow-xl shadow-blue-100 border border-blue-50 hover:bg-blue-600 hover:text-white transition-all active:scale-95 flex items-center space-x-2 group/btn"
-        >
-          <MapIcon size={20} className="group-hover/btn:rotate-12 transition-transform" />
-          <span>Simular IA</span>
         </button>
 
         <button

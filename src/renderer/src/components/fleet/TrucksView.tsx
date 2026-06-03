@@ -27,7 +27,8 @@ const TrucksView = () => {
     insurance_type: 'Cobertura amplia' as 'Cobertura amplia' | 'Daños a terceros',
     loading_nip: '',
     is_refrigerated: 1,
-    type: 'Camión' as 'Camión' | 'Camioneta'
+    type: 'Camión' as 'Camión' | 'Camioneta',
+    is_available: 1
   })
 
   const loadTrucks = async () => {
@@ -55,7 +56,7 @@ const TrucksView = () => {
       }
       setIsModalOpen(false)
       setEditingTruck(null)
-      setFormData({ name: '', capacity_kg: 0, capacity_volume: 0, fuel_capacity: 0, insurance_policy: '', insurance_name: '', insurance_phone: '', insurance_type: 'Cobertura amplia', loading_nip: '', is_refrigerated: 1, type: 'Camión' })
+      setFormData({ name: '', capacity_kg: 0, capacity_volume: 0, fuel_capacity: 0, insurance_policy: '', insurance_name: '', insurance_phone: '', insurance_type: 'Cobertura amplia', loading_nip: '', is_refrigerated: 1, type: 'Camión', is_available: 1 })
       loadTrucks()
     } catch (error) {
       console.error('Error saving truck:', error)
@@ -75,7 +76,8 @@ const TrucksView = () => {
       insurance_type: t.insurance_type || 'Cobertura amplia',
       loading_nip: t.loading_nip || '',
       is_refrigerated: t.is_refrigerated ?? 1,
-      type: t.type as 'Camión' | 'Camioneta'
+      type: t.type as 'Camión' | 'Camioneta',
+      is_available: t.is_available ?? 1
     })
     setIsModalOpen(true)
   }
@@ -104,7 +106,7 @@ const TrucksView = () => {
         <button
           onClick={() => {
             setEditingTruck(null)
-            setFormData({ name: '', capacity_kg: 0, capacity_volume: 0, fuel_capacity: 0, insurance_policy: '', insurance_name: '', insurance_phone: '', insurance_type: 'Cobertura amplia', loading_nip: '', is_refrigerated: 1, type: 'Camión' })
+            setFormData({ name: '', capacity_kg: 0, capacity_volume: 0, fuel_capacity: 0, insurance_policy: '', insurance_name: '', insurance_phone: '', insurance_type: 'Cobertura amplia', loading_nip: '', is_refrigerated: 1, type: 'Camión', is_available: 1 })
             setIsModalOpen(true)
           }}
           className="bg-gradient-to-b from-orange-500 to-orange-600 border border-orange-400 text-white px-8 py-4 rounded-2xl font-black shadow-[0_10px_30px_rgba(234,88,12,0.3)] hover:shadow-[0_20px_40px_rgba(234,88,12,0.4)] hover:to-orange-500 transition-all duration-300 active:scale-95 flex items-center space-x-2 group/btn relative overflow-hidden shrink-0"
@@ -229,29 +231,52 @@ const TrucksView = () => {
                 </div>
               </div>
 
-              <div className="mt-8 flex items-center justify-end space-x-2 relative z-10 border-t border-slate-100 pt-5">
-                <button
-                  onClick={() => handleEdit(truck)}
-                  className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 hover:shadow-inner rounded-xl transition-all"
-                  title="Editar"
-                >
-                  <Edit2 size={18} />
-                </button>
-                <button
-                  onClick={() => setConfirmAction({
-                    isOpen: true,
-                    title: 'Eliminar Unidad',
-                    message: '¿Estás seguro de eliminar esta unidad permanentemente?',
-                    action: async () => {
-                      await window.api.db.delete('trucks', truck.id)
-                      loadTrucks()
-                    }
-                  })}
-                  className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 hover:shadow-inner rounded-xl transition-all"
-                  title="Eliminar"
-                >
-                  <Trash2 size={18} />
-                </button>
+              <div className="mt-8 flex items-center justify-between relative z-10 border-t border-slate-100 pt-5">
+                <div className="flex items-center gap-3">
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${truck.is_available !== 0 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                    {truck.is_available !== 0 ? 'Disponible' : 'Fuera de Servicio'}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      const newStatus = truck.is_available !== 0 ? 0 : 1;
+                      await window.api.db.update('trucks', truck.id, { is_available: newStatus });
+                      loadTrucks();
+                    }}
+                    className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 outline-none flex items-center ${
+                      truck.is_available !== 0 ? 'bg-emerald-500' : 'bg-slate-300'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${
+                        truck.is_available !== 0 ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleEdit(truck)}
+                    className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-orange-600 hover:bg-orange-50 hover:shadow-inner rounded-xl transition-all"
+                    title="Editar"
+                  >
+                    <Edit2 size={18} />
+                  </button>
+                  <button
+                    onClick={() => setConfirmAction({
+                      isOpen: true,
+                      title: 'Eliminar Unidad',
+                      message: '¿Estás seguro de eliminar esta unidad permanentemente?',
+                      action: async () => {
+                        await window.api.db.delete('trucks', truck.id)
+                        loadTrucks()
+                      }
+                    })}
+                    className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 hover:shadow-inner rounded-xl transition-all"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -409,6 +434,19 @@ const TrucksView = () => {
                     <option value={0}>No</option>
                   </select>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
+                  Disponibilidad de la Unidad
+                </label>
+                <select
+                  value={formData.is_available}
+                  onChange={(e) => setFormData({ ...formData, is_available: parseInt(e.target.value) })}
+                  className="w-full px-6 py-4 rounded-2xl bg-white border border-slate-200 shadow-sm focus:border-red-500/50 focus:ring-[4px] focus:ring-red-500/10 transition-all outline-none font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value={1}>Activa / Disponible</option>
+                  <option value={0}>Fuera de Servicio (Inactiva)</option>
+                </select>
               </div>
               <div className="pt-8 flex items-center gap-4">
                 <button

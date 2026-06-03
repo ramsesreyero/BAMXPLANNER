@@ -44,15 +44,36 @@ export const exportRouteToPDF = (route: any) => {
     // Preparar datos de la tabla
     let currentY = 90
     
-    // AutoTable para las paradas
-    const stopsData = route.stops?.map((stop: any, idx: number) => [
-        idx + 1,
-        stop.stop_type || stop.type,
-        stop.stop_name || stop.name || `ID ${stop.stop_id}`,
-        stop.volume ? `${stop.volume} Unidades` : 'Por definir',
-        stop.recovery_fee > 0 ? `$${stop.recovery_fee}` : '-',
-        '' // Firma
-    ]) || []
+    // AutoTable para las paradas (con CEDIS al inicio y final)
+    const stopsData: any[] = []
+    if (route.stops && route.stops.length > 0) {
+        stopsData.push([
+            '▶',
+            'Almacén',
+            'CEDIS BAMX (C. Iturbide 1407, San José, Nuevo Laredo)',
+            'Inicio de Ruta',
+            '-',
+            ''
+        ])
+        route.stops.forEach((stop: any, idx: number) => {
+            stopsData.push([
+                idx + 1,
+                stop.stop_type || stop.type,
+                stop.stop_name || stop.name || `ID ${stop.stop_id}`,
+                stop.volume ? `${stop.volume} Unidades` : 'Por definir',
+                stop.recovery_fee > 0 ? `$${stop.recovery_fee}` : '-',
+                '' // Firma
+            ])
+        })
+        stopsData.push([
+            '■',
+            'Almacén',
+            'CEDIS BAMX (C. Iturbide 1407, San José, Nuevo Laredo)',
+            'Fin de Ruta',
+            '-',
+            ''
+        ])
+    }
 
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
@@ -135,7 +156,11 @@ export const exportMonthlyPlanToPDF = (plan: any, monthName: string, year: numbe
             doc.setTextColor(249, 115, 22)
             doc.text('UNIDAD A - JUAN', 14, currentY)
             
-            const stopsA = day.truckA.stops.map((s: any, i: number) => [i + 1, s.type, s.name])
+            const stopsA = [
+                ['▶', 'Almacén', 'CEDIS BAMX (Salida)'],
+                ...day.truckA.stops.map((s: any, i: number) => [i + 1, s.type, s.name]),
+                ['■', 'Almacén', 'CEDIS BAMX (Llegada)']
+            ]
             autoTable(doc, {
                 startY: currentY + 5,
                 head: [['#', 'Tipo', 'Destino']],
@@ -158,7 +183,11 @@ export const exportMonthlyPlanToPDF = (plan: any, monthName: string, year: numbe
             doc.setTextColor(37, 99, 235) // azul-600
             doc.text('UNIDAD B - GENERAL', 14, currentY)
             
-            const stopsB = day.truckB.stops.map((s: any, i: number) => [i + 1, s.type, s.name])
+            const stopsB = [
+                ['▶', 'Almacén', 'CEDIS BAMX (Salida)'],
+                ...day.truckB.stops.map((s: any, i: number) => [i + 1, s.type, s.name]),
+                ['■', 'Almacén', 'CEDIS BAMX (Llegada)']
+            ]
             autoTable(doc, {
                 startY: currentY + 5,
                 head: [['#', 'Tipo', 'Destino']],

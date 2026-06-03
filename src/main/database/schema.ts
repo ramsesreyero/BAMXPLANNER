@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS trucks (
   insurance_type TEXT CHECK(insurance_type IN ('Cobertura amplia', 'Daños a terceros')) DEFAULT 'Cobertura amplia',
   loading_nip TEXT,
   is_refrigerated INTEGER DEFAULT 1,
-  type TEXT CHECK(type IN ('Camión', 'Camioneta')) DEFAULT 'Camión'
+  type TEXT CHECK(type IN ('Camión', 'Camioneta')) DEFAULT 'Camión',
+  is_available INTEGER DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS drivers (
@@ -78,7 +79,8 @@ CREATE TABLE IF NOT EXISTS drivers (
   license_data TEXT,
   license_photo TEXT,
   available_days TEXT, -- ej. 'Lunes,Martes,...'
-  max_hours_per_day REAL DEFAULT 8
+  max_hours_per_day REAL DEFAULT 8,
+  is_available INTEGER DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS warehouse (

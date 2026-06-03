@@ -62,6 +62,7 @@ export interface TruckData {
   loading_nip?: string
   is_refrigerated: number
   type: 'Camión' | 'Camioneta'
+  is_available?: number
 }
 
 export interface Driver {
@@ -72,6 +73,7 @@ export interface Driver {
   license_photo?: string
   available_days: string
   max_hours_per_day: number
+  is_available?: number
 }
 
 export interface Holiday {

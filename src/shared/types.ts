@@ -58,6 +58,7 @@ export interface Truck {
   capacity_volume: number
   insurance_policy?: string
   type: 'Camión' | 'Camioneta'
+  is_available?: number
 }
 
 export interface Driver {
@@ -67,6 +68,7 @@ export interface Driver {
   license_data?: string
   available_days: string
   max_hours_per_day: number
+  is_available?: number
 }
 
 export interface Warehouse {

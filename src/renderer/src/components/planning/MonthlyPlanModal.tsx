@@ -21,6 +21,8 @@ interface MonthlyPlanModalProps {
   reorderStopInDay: (dayIdx: number, truck: 'truckA' | 'truckB', stopIdx: number, direction: 'up' | 'down') => void
   moveStopBetweenTrucks: (dayIdx: number, fromTruck: 'truckA' | 'truckB', stopIdx: number) => void
   removeStopFromDay: (dayIdx: number, truck: 'truckA' | 'truckB', stopIdx: number) => void
+  selectedFilters: { supermarkets: boolean; colonies: boolean; beneficiaries: boolean; institutions: boolean }
+  setSelectedFilters: React.Dispatch<React.SetStateAction<{ supermarkets: boolean; colonies: boolean; beneficiaries: boolean; institutions: boolean }>>
 }
 
 export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
@@ -37,7 +39,9 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
   calculatePlanStats,
   reorderStopInDay,
   moveStopBetweenTrucks,
-  removeStopFromDay
+  removeStopFromDay,
+  selectedFilters,
+  setSelectedFilters
 }) => {
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null)
 
@@ -87,6 +91,47 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
                   Generar Plan
                 </button>
               </div>
+
+              {/* Selector de tipo de paradas/filtros premium */}
+              <div className="flex flex-wrap items-center gap-3 mt-4 bg-indigo-50/30 p-2.5 rounded-2xl border border-indigo-100/30">
+                <span className="text-[10px] font-black text-indigo-950/60 uppercase tracking-[0.15em] mr-1">Incluir en ruta:</span>
+                <label className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-100/50 bg-white text-[10px] font-black uppercase cursor-pointer hover:bg-indigo-50/50 transition-all shadow-sm">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedFilters.supermarkets} 
+                    onChange={() => setSelectedFilters(prev => ({ ...prev, supermarkets: !prev.supermarkets }))}
+                    className="accent-indigo-600 rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span className="text-indigo-950">Supermercados</span>
+                </label>
+                <label className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-100/50 bg-white text-[10px] font-black uppercase cursor-pointer hover:bg-indigo-50/50 transition-all shadow-sm">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedFilters.colonies} 
+                    onChange={() => setSelectedFilters(prev => ({ ...prev, colonies: !prev.colonies }))}
+                    className="accent-indigo-600 rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span className="text-indigo-950">Colonias</span>
+                </label>
+                <label className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-100/50 bg-white text-[10px] font-black uppercase cursor-pointer hover:bg-indigo-50/50 transition-all shadow-sm">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedFilters.institutions} 
+                    onChange={() => setSelectedFilters(prev => ({ ...prev, institutions: !prev.institutions }))}
+                    className="accent-indigo-600 rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span className="text-indigo-950">Instituciones</span>
+                </label>
+                <label className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-100/50 bg-white text-[10px] font-black uppercase cursor-pointer hover:bg-indigo-50/50 transition-all shadow-sm">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedFilters.beneficiaries} 
+                    onChange={() => setSelectedFilters(prev => ({ ...prev, beneficiaries: !prev.beneficiaries }))}
+                    className="accent-indigo-600 rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span className="text-indigo-950">Beneficiarios</span>
+                </label>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4 bg-white/50 p-2 rounded-3xl border border-indigo-50 shadow-sm">
@@ -126,7 +171,7 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
                 <Calendar className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600" size={32} />
               </div>
               <h4 className="text-2xl font-black text-indigo-900 mt-8 tracking-tight">Generando Inteligencia Logística</h4>
-              <p className="text-slate-400 mt-2 font-medium">Distribuyendo colonias urbanas, rurales y caridad...</p>
+              <p className="text-slate-400 mt-2 font-medium">Consultando distancias reales (OSRM) y optimizando con IA...</p>
             </div>
           ) : monthlyPlan && selectedDayIndex === null ? (
             <div className="w-full mx-auto space-y-12">
@@ -263,16 +308,48 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
                             <div className={`p-4 rounded-2xl ${isTruckA ? 'bg-orange-600 text-white' : 'bg-blue-600 text-white'}`}>
                               <Truck size={20} />
                             </div>
-                            <div>
+                        <div>
                               <h4 className="font-black text-slate-900 text-xl tracking-tight">
                                 {isTruckA ? 'Unidad A (Juan)' : 'Unidad B (General)'}
                               </h4>
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{truckData.stops.length} Paradas Asignadas</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{truckData.stops.length} Paradas</p>
+                                {truckData.stats && (
+                                  <>
+                                    <span className="text-slate-200">·</span>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{truckData.stats.distanceKm} km</p>
+                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide ${
+                                      truckData.stats.fromOSRM
+                                        ? 'bg-emerald-100 text-emerald-600'
+                                        : 'bg-amber-100 text-amber-600'
+                                    }`}>
+                                      {truckData.stats.fromOSRM ? 'OSRM ✓' : 'Haversine'}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
 
                         <div className="space-y-3">
+                          {truckData.stops.length > 0 && (
+                            <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center font-black text-xs">
+                                  ▶
+                                </div>
+                                <div>
+                                  <p className="font-black text-white text-sm leading-none">CEDIS BAMX (Salida)</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <p className="text-[9px] font-black text-orange-400 uppercase">Inicio de Ruta</p>
+                                    <p className="text-[9px] font-black text-blue-300">🕐 07:00</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {truckData.stops.map((stop, sIdx) => (
                             <div key={sIdx} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group/stop hover:border-indigo-400 transition-all">
                               <div className="flex items-center gap-4">
@@ -281,7 +358,21 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
                                 </div>
                                 <div>
                                   <p className="font-black text-slate-900 text-sm leading-none">{stop.name}</p>
-                                  <p className="text-[9px] font-black text-slate-400 uppercase mt-1">{stop.type}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase">{stop.type}</p>
+                                    {stop.estimatedArrival && (
+                                      <>
+                                        <span className="text-slate-200">·</span>
+                                        <p className="text-[9px] font-black text-indigo-500">🕐 {stop.estimatedArrival}</p>
+                                      </>
+                                    )}
+                                    {stop.transitMinutes != null && stop.transitMinutes > 0 && (
+                                      <>
+                                        <span className="text-slate-200">·</span>
+                                        <p className="text-[9px] font-medium text-slate-400">{Math.round(stop.transitMinutes)} min tránsito</p>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 opacity-0 group-hover/stop:opacity-100 transition-all">
@@ -315,6 +406,31 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
                               </div>
                             </div>
                           ))}
+
+                          {truckData.stops.length > 0 && (
+                            <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center font-black text-xs">
+                                  ■
+                                </div>
+                                <div>
+                                  <p className="font-black text-white text-sm leading-none">CEDIS BAMX (Llegada)</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <p className="text-[9px] font-black text-orange-400 uppercase">Fin de Ruta</p>
+                                    {(() => {
+                                      if (truckData.stats?.durationMinutes) {
+                                        const totalMin = 7 * 60 + truckData.stats.durationMinutes;
+                                        const h = Math.floor(totalMin / 60) % 24;
+                                        const m = Math.round(totalMin % 60);
+                                        return <p className="text-[9px] font-black text-blue-300">🕐 {String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}</p>;
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           {truckData.stops.length === 0 && (
                             <div className="py-8 text-center border-2 border-dashed border-slate-100 rounded-2xl">
                               <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Sin Servicios</p>

@@ -9,7 +9,9 @@ const api = {
     create: (table: string, data: any) => ipcRenderer.invoke('db:create', table, data),
     update: (table: string, id: number, data: any) =>
       ipcRenderer.invoke('db:update', table, id, data),
-    delete: (table: string, id: number) => ipcRenderer.invoke('db:delete', table, id)
+    delete: (table: string, id: number) => ipcRenderer.invoke('db:delete', table, id),
+    exportDatabase: () => ipcRenderer.invoke('db:export'),
+    importDatabase: () => ipcRenderer.invoke('db:import')
   },
   planning: {
     getSuggestions: (date: string) => ipcRenderer.invoke('planning:get-suggestions', date),

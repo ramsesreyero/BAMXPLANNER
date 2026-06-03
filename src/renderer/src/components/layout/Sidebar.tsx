@@ -29,6 +29,26 @@ const NavItem = ({ to, icon: Icon, label }: { to: string; icon: any; label: stri
 
 export const Sidebar = () => {
   const [capacity, setCapacity] = useState({ percentage: 0, text: '...' })
+  const [userName, setUserName] = useState('Christian')
+
+  useEffect(() => {
+    const fetchUserName = async () => {
+      try {
+        const userSetting = await window.api.settings.get('user_name')
+        if (userSetting) {
+          setUserName(userSetting.value)
+        } else {
+          setUserName('Christian')
+        }
+      } catch (err) {
+        console.error('Error fetching username:', err)
+      }
+    }
+
+    fetchUserName()
+    window.addEventListener('settings-updated', fetchUserName)
+    return () => window.removeEventListener('settings-updated', fetchUserName)
+  }, [])
 
   useEffect(() => {
     const fetchCapacity = async () => {
@@ -80,7 +100,6 @@ export const Sidebar = () => {
         <NavItem to="/instituciones" icon={Building2} label="Instituciones" />
         <NavItem to="/supermercados" icon={ShoppingCart} label="Súper" />
         <NavItem to="/caridad" icon={Heart} label="Caridad" />
-        <NavItem to="/almacen" icon={Building2} label="Almacén" />
 
         <div className="px-4 py-3 mt-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] leading-none">
           Logística
@@ -111,7 +130,7 @@ export const Sidebar = () => {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-black text-white truncate tracking-tight">
-              Admin BAMX
+              {userName}
             </p>
             <p className="text-[10px] text-slate-500 font-bold truncate uppercase tracking-widest mt-0.5">
               {new Date().toLocaleDateString('es-MX', {

@@ -58,6 +58,26 @@ const DashboardView = () => {
   })
   const [activities, setActivities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [userName, setUserName] = useState('Christian')
+
+  useEffect(() => {
+    const fetchUserName = async () => {
+      try {
+        const userSetting = await window.api.settings.get('user_name')
+        if (userSetting) {
+          setUserName(userSetting.value)
+        } else {
+          setUserName('Christian')
+        }
+      } catch (err) {
+        console.error('Error fetching username:', err)
+      }
+    }
+
+    fetchUserName()
+    window.addEventListener('settings-updated', fetchUserName)
+    return () => window.removeEventListener('settings-updated', fetchUserName)
+  }, [])
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -143,7 +163,7 @@ const DashboardView = () => {
             </div>
             <div className="space-y-1">
               <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
-                {greeting()}, <span className="text-orange-400">Christian</span>
+                {greeting()}, <span className="text-orange-400">{userName}</span>
               </h1>
               <p className="text-slate-400 font-medium text-lg leading-relaxed">
                 Hoy es{' '}
@@ -319,9 +339,12 @@ const DashboardView = () => {
               )
             })}
           </div>
-          <button className="mt-10 w-full py-4 bg-slate-50 text-slate-500 rounded-2xl text-xs font-black uppercase tracking-[0.2em] border border-slate-100 hover:bg-slate-100 transition-all active:scale-95">
+          <Link
+            to="/historial"
+            className="mt-10 w-full py-4 bg-slate-50 text-slate-500 rounded-2xl text-xs font-black uppercase tracking-[0.2em] border border-slate-100 hover:bg-slate-100 transition-all active:scale-95 text-center block"
+          >
             Historial Completo
-          </button>
+          </Link>
         </div>
       </div>
     </div>

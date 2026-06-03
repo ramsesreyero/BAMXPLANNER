@@ -24,6 +24,8 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@types/leaflet": "^1.9.21",
+    "7zip-bin": "^5.2.0",
+    "app-builder-bin": "^5.0.0-alpha.12",
     "better-sqlite3": "^12.6.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",

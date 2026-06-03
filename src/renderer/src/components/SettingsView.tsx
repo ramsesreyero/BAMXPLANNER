@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MapPin, Clock, Settings, ShieldCheck, Calendar, Zap, Save, RefreshCcw, AlertCircle, Trash2 } from 'lucide-react'
+import { MapPin, Clock, Settings, ShieldCheck, Calendar, Zap, Save, RefreshCcw, AlertCircle, Trash2, Database, Download, Upload, User } from 'lucide-react'
 
 interface Holiday {
   date: string;
@@ -7,7 +7,7 @@ interface Holiday {
 }
 
 const SettingsView = () => {
-    const [activeTab, setActiveTab] = useState<'warehouse' | 'algorithm' | 'holidays'>('warehouse')
+    const [activeTab, setActiveTab] = useState<'warehouse' | 'algorithm' | 'holidays' | 'backup' | 'profile'>('profile')
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     
@@ -31,13 +31,27 @@ const SettingsView = () => {
     // Dias inhabiles (Vacaciones)
     const [holidays, setHolidays] = useState<Holiday[]>([])
     const [newHoliday, setNewHoliday] = useState({ date: '', reason: '' })
+    
+    // Nombre de usuario
+    const [userName, setUserName] = useState('Christian')
 
     const fetchData = async () => {
         setLoading(true)
         try {
             // Cargar almacen
             const wData = await window.api.db.list('warehouse')
-            if (wData.length > 0) setWarehouseData(wData[0] as any)
+            if (wData.length > 0) {
+                setWarehouseData(wData[0] as any)
+            } else {
+                // Si la tabla warehouse esta vacia, intentar leer de settings
+                const addrStr = await window.api.settings.get('cedis_address')
+                const coordsStr = await window.api.settings.get('cedis_coords')
+                setWarehouseData(prev => ({
+                    ...prev,
+                    address: addrStr?.value || 'C. Iturbide 1407, San José, 88230 Nuevo Laredo, Tamps.',
+                    coordinates: coordsStr?.value || '27.477850806886945, -99.49498391012905'
+                }))
+            }
 
             // Cargar configuracion del algoritmo desde la tabla de configuraciones
             const algoStr = await window.api.settings.get('algorithm_config')
@@ -46,6 +60,14 @@ const SettingsView = () => {
             // Cargar dias inhabiles
             const holidayStr = await window.api.settings.get('non_working_days')
             if (holidayStr) setHolidays(JSON.parse(holidayStr.value))
+
+            // Cargar nombre de usuario
+            const userStr = await window.api.settings.get('user_name')
+            if (userStr) {
+                setUserName(userStr.value)
+            } else {
+                setUserName('Christian')
+            }
 
         } catch (error) {
             console.error('Error fetching settings:', error)
@@ -58,6 +80,20 @@ const SettingsView = () => {
         fetchData()
     }, [])
 
+    const handleSaveProfile = async () => {
+        setSaving(true)
+        try {
+            await window.api.settings.set('user_name', userName)
+            window.dispatchEvent(new Event('settings-updated'))
+            alert('¡Perfil guardado exitosamente!')
+        } catch (error: any) {
+            console.error('Error saving profile:', error)
+            alert('Error al guardar el perfil: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
     const handleSaveWarehouse = async () => {
         setSaving(true)
         try {
@@ -67,8 +103,13 @@ const SettingsView = () => {
             } else {
                 await window.api.db.create('warehouse', { ...warehouseData, id: 1 })
             }
-        } catch (error) {
+            // Sincronizar en settings para que la generacion de rutas y otros componentes lo lean
+            await window.api.settings.set('cedis_address', warehouseData.address)
+            await window.api.settings.set('cedis_coords', warehouseData.coordinates)
+            alert('¡Configuración de Almacén guardada exitosamente!')
+        } catch (error: any) {
             console.error('Error saving warehouse:', error)
+            alert('Error al guardar la configuración del almacén: ' + error.message)
         } finally {
             setSaving(false)
         }
@@ -78,8 +119,10 @@ const SettingsView = () => {
         setSaving(true)
         try {
             await window.api.settings.set('algorithm_config', JSON.stringify(algoData))
-        } catch (error) {
+            alert('¡Configuración del Motor guardada exitosamente!')
+        } catch (error: any) {
             console.error('Error saving algorithm:', error)
+            alert('Error al guardar la configuración del motor: ' + error.message)
         } finally {
             setSaving(false)
         }
@@ -145,9 +188,11 @@ const SettingsView = () => {
                 {/* Pestanas */}
                 <div className="flex gap-2 mt-12 bg-slate-100/50 p-2 rounded-3xl border border-slate-200/50 w-fit">
                     {[
+                        { id: 'profile', label: 'Perfil', icon: <User size={18}/> },
                         { id: 'warehouse', label: 'Almacén', icon: <MapPin size={18}/> },
                         { id: 'algorithm', label: 'Algoritmo', icon: <Zap size={18}/> },
-                        { id: 'holidays', label: 'Días Inhábiles', icon: <Calendar size={18}/> }
+                        { id: 'holidays', label: 'Días Inhábiles', icon: <Calendar size={18}/> },
+                        { id: 'backup', label: 'Base de Datos', icon: <Database size={18}/> }
                     ].map(tab => (
                         <button
                             key={tab.id}
@@ -167,6 +212,38 @@ const SettingsView = () => {
 
             {/* Area de contenido */}
             <div className="min-h-[500px]">
+                {activeTab === 'profile' && (
+                    <div className="max-w-2xl bg-white p-10 rounded-[3rem] border border-slate-200 shadow-premium space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex items-center gap-4">
+                            <div className="p-4 bg-indigo-50 rounded-3xl text-indigo-600">
+                                <User size={24}/>
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Perfil de Usuario</h3>
+                                <p className="text-slate-500 font-medium tracking-tight">Administra la información de tu cuenta local.</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre de Usuario</label>
+                                <input 
+                                    type="text" 
+                                    value={userName}
+                                    onChange={e => setUserName(e.target.value)}
+                                    placeholder="Christian"
+                                    className="w-full px-8 py-5 rounded-[2rem] bg-slate-50 border-transparent focus:bg-white focus:border-indigo-500/50 outline-none font-bold text-slate-900 transition-all shadow-inner"
+                                />
+                            </div>
+                        </div>
+
+                        <button onClick={handleSaveProfile} disabled={saving} className="bg-indigo-600 text-white w-full py-6 rounded-[2rem] font-black shadow-2xl shadow-indigo-200 flex items-center justify-center gap-3 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50">
+                            <Save size={20}/>
+                            Guardar Perfil
+                        </button>
+                    </div>
+                )}
+
                 {activeTab === 'warehouse' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-right-4 duration-500">
                         <section className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-premium space-y-8">
@@ -345,6 +422,81 @@ const SettingsView = () => {
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'backup' && (
+                    <div className="bg-white p-12 rounded-[4rem] border border-slate-200 shadow-premium animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex items-center gap-6 mb-12">
+                            <div className="p-4 bg-indigo-50 rounded-3xl text-indigo-600">
+                                <Database size={32}/>
+                            </div>
+                            <div>
+                                <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Respaldo del Sistema</h3>
+                                <p className="text-slate-500 font-medium tracking-tight">Exporta o importa la base de datos completa (incluye choferes, licencias, historiales, etc.).</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="p-8 rounded-[2.5rem] border border-slate-100 bg-slate-50/50 space-y-6 flex flex-col justify-between hover:shadow-lg transition-all duration-300">
+                                <div className="space-y-3">
+                                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-sm">
+                                        <Download size={22} />
+                                    </div>
+                                    <h4 className="text-xl font-black text-slate-950 uppercase tracking-tight">Exportar Datos</h4>
+                                    <p className="text-sm text-slate-400 font-medium">Guarda una copia de seguridad en tu computadora con todos los datos actuales del sistema, incluyendo fotos e historiales de rutas.</p>
+                                </div>
+                                <button 
+                                    onClick={async () => {
+                                        try {
+                                            const res = await window.api.db.exportDatabase();
+                                            if (res.success) {
+                                                alert("¡Base de datos exportada con éxito!");
+                                            } else if (res.error) {
+                                                alert(`Error al exportar: ${res.error}`);
+                                            }
+                                        } catch (error: any) {
+                                            alert(`Error inesperado: ${error.message}`);
+                                        }
+                                    }} 
+                                    className="bg-indigo-600 text-white w-full py-5 rounded-3xl font-black shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all active:scale-95"
+                                >
+                                    <Download size={18} />
+                                    Exportar Base de Datos (.db)
+                                </button>
+                            </div>
+
+                            <div className="p-8 rounded-[2.5rem] border border-slate-100 bg-slate-50/50 space-y-6 flex flex-col justify-between hover:shadow-lg transition-all duration-300">
+                                <div className="space-y-3">
+                                    <div className="w-12 h-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center shadow-sm">
+                                        <Upload size={22} />
+                                    </div>
+                                    <h4 className="text-xl font-black text-slate-950 uppercase tracking-tight">Importar Datos</h4>
+                                    <p className="text-sm text-slate-400 font-medium">Reemplaza todos los datos actuales cargando una base de datos guardada previamente. <span className="text-red-500 font-black">Esta acción es destructiva y sobrescribirá los datos locales actuales.</span></p>
+                                </div>
+                                <button 
+                                    onClick={async () => {
+                                        if (confirm("⚠️ ADVERTENCIA: Importar una base de datos reemplazará COMPLETAMENTE tus datos actuales (colonias, choferes, imágenes, rutas). ¿Deseas continuar?")) {
+                                            try {
+                                                const res = await window.api.db.importDatabase();
+                                                if (res.success) {
+                                                    alert("¡Base de datos importada correctamente! La aplicación se recargará para aplicar los cambios.");
+                                                    window.location.reload();
+                                                } else if (res.error) {
+                                                    alert(`Error al importar: ${res.error}`);
+                                                }
+                                            } catch (error: any) {
+                                                alert(`Error inesperado: ${error.message}`);
+                                            }
+                                        }
+                                    }} 
+                                    className="bg-red-600 text-white w-full py-5 rounded-3xl font-black shadow-xl shadow-red-100 flex items-center justify-center gap-2 hover:bg-red-700 transition-all active:scale-95"
+                                >
+                                    <Upload size={18} />
+                                    Importar Base de Datos (.db)
+                                </button>
                             </div>
                         </div>
                     </div>
