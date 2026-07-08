@@ -4,6 +4,7 @@ import { Plus, Edit2, Trash2, ShoppingCart, Search, Filter, Map } from 'lucide-r
 import ConfirmModal from '../ConfirmModal'
 import ItemMapModal from '../ItemMapModal'
 import { Supermarket } from '../../types'
+import { AddressAutocomplete } from '../AddressAutocomplete'
 
 const SupermarketsView = () => {
   const [supermarkets, setSupermarkets] = useState<Supermarket[]>([])
@@ -277,11 +278,18 @@ const SupermarketsView = () => {
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
                     Dirección / Ubicación
                   </label>
-                  <input
-                    type="text"
+                  <AddressAutocomplete
                     value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900"
+                    onChange={(val) => setFormData({ ...formData, address: val })}
+                    onSelectPlace={(place) => {
+                      setFormData({
+                        ...formData,
+                        address: place.address,
+                        lat: place.lat,
+                        lng: place.lng
+                      })
+                    }}
+                    placeholder="Dirección del supermercado (Autocompletado)"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-6">

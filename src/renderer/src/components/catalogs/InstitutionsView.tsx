@@ -4,6 +4,7 @@ import { Plus, Edit2, Trash2, Building2, Search, Filter, Map } from 'lucide-reac
 import ConfirmModal from '../ConfirmModal'
 import ItemMapModal from '../ItemMapModal'
 import { Institution } from '../../types'
+import { AddressAutocomplete } from '../AddressAutocomplete'
 
 const InstitutionsView = () => {
   const [institutions, setInstitutions] = useState<Institution[]>([])
@@ -265,11 +266,18 @@ const InstitutionsView = () => {
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
                     Dirección
                   </label>
-                  <input
-                    type="text"
+                  <AddressAutocomplete
                     value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none font-bold text-slate-900"
+                    onChange={(val) => setFormData({ ...formData, address: val })}
+                    onSelectPlace={(place) => {
+                      setFormData({
+                        ...formData,
+                        address: place.address,
+                        lat: place.lat,
+                        lng: place.lng
+                      })
+                    }}
+                    placeholder="Dirección de la institución (Autocompletado)"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-6">

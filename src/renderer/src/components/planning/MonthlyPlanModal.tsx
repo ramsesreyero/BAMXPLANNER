@@ -163,7 +163,7 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-12 bg-slate-50/30">
+        <div className={`flex-1 p-6 lg:p-8 bg-slate-50/30 flex flex-col ${selectedDayIndex === null ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {isGeneratingMonthly ? (
             <div className="h-full flex flex-col items-center justify-center">
               <div className="relative">
@@ -278,32 +278,32 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
               </div>
             </div>
           ) : monthlyPlan && selectedDayIndex !== null ? (
-            <div className="w-full mx-auto flex flex-col h-full space-y-8 animate-in slide-in-from-right-8 duration-500">
-              <div className="flex items-center justify-between bg-white p-6 rounded-[2.5rem] border border-indigo-100 shadow-sm">
+            <div className="w-full mx-auto flex flex-col h-full space-y-4 animate-in slide-in-from-right-8 duration-500 min-h-0">
+              <div className="flex items-center justify-between bg-white p-4 px-6 rounded-3xl border border-indigo-100 shadow-sm shrink-0">
                 <button
                   onClick={() => setSelectedDayIndex(null)}
-                  className="flex items-center gap-3 px-6 py-3 bg-slate-100 text-slate-600 font-black rounded-2xl hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest"
+                  className="flex items-center gap-3 px-5 py-2.5 bg-slate-100 text-slate-600 font-black rounded-xl hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest"
                 >
                   <ChevronLeft size={16} />
                   Volver al Calendario
                 </button>
                 <div className="text-right">
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Día Seleccionado</p>
-                  <p className="text-2xl font-black text-slate-900 tracking-tighter">
+                  <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Día Seleccionado</p>
+                  <p className="text-xl font-black text-slate-900 tracking-tighter">
                     {new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(monthlyPlan.days[selectedDayIndex].date + 'T12:00:00'))}
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1 min-h-0">
-                <div className="space-y-6 overflow-y-auto pr-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+                <div className="space-y-4 overflow-y-auto pr-2">
                   {['truckA', 'truckB'].map((truckKey) => {
                     const truckData = monthlyPlan.days[selectedDayIndex][truckKey as 'truckA' | 'truckB'];
                     const isTruckA = truckKey === 'truckA';
 
                     return (
-                      <div key={truckKey} className={`p-8 rounded-[3rem] border shadow-premium ${isTruckA ? 'bg-orange-50/20 border-orange-100' : 'bg-blue-50/20 border-blue-100'}`}>
-                        <div className="flex items-center justify-between mb-8">
+                      <div key={truckKey} className={`p-6 rounded-[2.5rem] border shadow-premium ${isTruckA ? 'bg-orange-50/20 border-orange-100' : 'bg-blue-50/20 border-blue-100'}`}>
+                        <div className="flex items-center justify-between mb-6">
                           <div className="flex items-center gap-4">
                             <div className={`p-4 rounded-2xl ${isTruckA ? 'bg-orange-600 text-white' : 'bg-blue-600 text-white'}`}>
                               <Truck size={20} />
@@ -449,6 +449,7 @@ export const MonthlyPlanModal: React.FC<MonthlyPlanModalProps> = ({
                     </div>
                   </div>
                   <MapVisualizer
+                    hideSidebar={true}
                     route={[
                       ...monthlyPlan.days[selectedDayIndex].truckA.stops.map(s => ({ ...s, truck: 'A' as const })),
                       ...monthlyPlan.days[selectedDayIndex].truckB.stops.map(s => ({ ...s, truck: 'B' as const }))

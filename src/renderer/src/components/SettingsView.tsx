@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MapPin, Clock, Settings, ShieldCheck, Calendar, Zap, Save, RefreshCcw, AlertCircle, Trash2, Database, Download, Upload, User } from 'lucide-react'
+import { MapPin, Clock, Settings, ShieldCheck, Calendar, Zap, Save, RefreshCcw, AlertCircle, Trash2, Database, Download, Upload, User, Map } from 'lucide-react'
 
 interface Holiday {
   date: string;
@@ -7,7 +7,7 @@ interface Holiday {
 }
 
 const SettingsView = () => {
-    const [activeTab, setActiveTab] = useState<'warehouse' | 'algorithm' | 'holidays' | 'backup' | 'profile'>('profile')
+    const [activeTab, setActiveTab] = useState<'warehouse' | 'algorithm' | 'holidays' | 'backup' | 'profile' | 'maps'>('profile')
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     
@@ -34,6 +34,15 @@ const SettingsView = () => {
     
     // Nombre de usuario
     const [userName, setUserName] = useState('Christian')
+
+    // Configuración de Google Maps
+    const [useGoogleMaps, setUseGoogleMaps] = useState('false')
+    const [googleMapsApiKey, setGoogleMapsApiKey] = useState('')
+    const [verifyStatus, setVerifyStatus] = useState<{ success?: boolean; message: string } | null>(null)
+    const [verifyLoading, setVerifyLoading] = useState(false)
+    const [isTutorialOpen, setIsTutorialOpen] = useState(false)
+    const [savedUseGoogleMaps, setSavedUseGoogleMaps] = useState('false')
+    const [savedGoogleMapsApiKey, setSavedGoogleMapsApiKey] = useState('')
 
     const fetchData = async () => {
         setLoading(true)
@@ -67,6 +76,19 @@ const SettingsView = () => {
                 setUserName(userStr.value)
             } else {
                 setUserName('Christian')
+            }
+
+            // Cargar Google Maps Settings
+            const useGMSetting = await window.api.settings.get('use_google_maps')
+            if (useGMSetting) {
+                setUseGoogleMaps(useGMSetting.value)
+                setSavedUseGoogleMaps(useGMSetting.value)
+            }
+            
+            const apiKeySetting = await window.api.settings.get('google_maps_api_key')
+            if (apiKeySetting) {
+                setGoogleMapsApiKey(apiKeySetting.value)
+                setSavedGoogleMapsApiKey(apiKeySetting.value)
             }
 
         } catch (error) {
@@ -152,6 +174,40 @@ const SettingsView = () => {
         handleSaveHolidays(updated)
     }
 
+    const handleSaveGoogleMaps = async () => {
+        setSaving(true)
+        try {
+            await window.api.settings.set('use_google_maps', useGoogleMaps)
+            await window.api.settings.set('google_maps_api_key', googleMapsApiKey)
+            setSavedUseGoogleMaps(useGoogleMaps)
+            setSavedGoogleMapsApiKey(googleMapsApiKey)
+            window.dispatchEvent(new Event('settings-updated'))
+            alert('¡Configuración de Google Maps guardada exitosamente!')
+        } catch (error: any) {
+            console.error('Error saving Google Maps settings:', error)
+            alert('Error al guardar la configuración: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const handleVerifyApiKey = async () => {
+        if (!googleMapsApiKey) {
+            setVerifyStatus({ success: false, message: 'Por favor, ingresa una clave API.' })
+            return
+        }
+        setVerifyLoading(true)
+        setVerifyStatus(null)
+        try {
+            const res = await window.api.googleMaps.verifyKey(googleMapsApiKey)
+            setVerifyStatus(res)
+        } catch (e: any) {
+            setVerifyStatus({ success: false, message: e.message || 'Error al conectar.' })
+        } finally {
+            setVerifyLoading(false)
+        }
+    }
+
     if (loading) {
         return (
             <div className="p-20 text-center">
@@ -190,6 +246,7 @@ const SettingsView = () => {
                     {[
                         { id: 'profile', label: 'Perfil', icon: <User size={18}/> },
                         { id: 'warehouse', label: 'Almacén', icon: <MapPin size={18}/> },
+                        { id: 'maps', label: 'Google Maps', icon: <Map size={18}/> },
                         { id: 'algorithm', label: 'Algoritmo', icon: <Zap size={18}/> },
                         { id: 'holidays', label: 'Días Inhábiles', icon: <Calendar size={18}/> },
                         { id: 'backup', label: 'Base de Datos', icon: <Database size={18}/> }
@@ -299,6 +356,132 @@ const SettingsView = () => {
                                 Actualizar Almacén
                             </button>
                         </section>
+                    </div>
+                )}
+
+                {activeTab === 'maps' && (
+                    <div className="bg-white p-12 rounded-[4rem] border border-slate-200 shadow-premium animate-in fade-in slide-in-from-right-4 duration-500 max-w-3xl space-y-8">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-4">
+                            <div className="flex items-center gap-6">
+                                <div className="p-4 bg-indigo-50 rounded-3xl text-indigo-600">
+                                    <Map size={32}/>
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Configuración de Mapas</h3>
+                                    <p className="text-slate-500 font-medium tracking-tight">Activa Google Maps para autocompletado y cálculo de distancias por tráfico.</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsTutorialOpen(true)}
+                                className="px-6 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm active:scale-95 shrink-0 flex items-center gap-2"
+                            >
+                                📖 Ver Guía Paso a Paso
+                            </button>
+                        </div>
+
+                        {/* Estado de la Vinculación */}
+                        {savedUseGoogleMaps === 'true' && savedGoogleMapsApiKey ? (
+                            <div className="p-6 bg-emerald-50/70 border border-emerald-100 rounded-3xl flex items-center justify-between animate-in fade-in duration-300">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black">
+                                        ✓
+                                    </div>
+                                    <div className="text-left">
+                                        <h5 className="text-xs font-black text-emerald-950 uppercase tracking-tight">Google Maps Activo y Vinculado</h5>
+                                        <p className="text-[10px] text-emerald-600 font-medium mt-0.5">El autocompletado y el cálculo de distancias están operando a través de Google Cloud.</p>
+                                    </div>
+                                </div>
+                                <span className="px-3.5 py-1.5 bg-emerald-500 text-white text-[9px] font-black uppercase tracking-wider rounded-xl">
+                                    En Línea
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="p-6 bg-slate-50 border border-slate-100 rounded-3xl flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-slate-300 text-slate-600 flex items-center justify-center font-black">
+                                        !
+                                    </div>
+                                    <div className="text-left">
+                                        <h5 className="text-xs font-black text-slate-950 uppercase tracking-tight">Modo Gratuito (OpenStreetMap)</h5>
+                                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">La aplicación está utilizando el mapa libre de Leaflet y OSRM.</p>
+                                    </div>
+                                </div>
+                                <span className="px-3.5 py-1.5 bg-slate-400 text-white text-[9px] font-black uppercase tracking-wider rounded-xl">
+                                    Desconectado
+                                </span>
+                            </div>
+                        )}
+
+                        <div className="space-y-6">
+                            {/* Toggle Switch */}
+                            <div className="flex items-center justify-between p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:shadow-md transition-all duration-300">
+                                <div>
+                                    <h4 className="text-base font-black text-slate-950 uppercase tracking-tight">Habilitar Google Maps</h4>
+                                    <p className="text-xs text-slate-400 font-medium mt-1">Si está apagado, se utilizará el mapa de OpenStreetMap (Leaflet/OSRM) de forma gratuita.</p>
+                                </div>
+                                <select 
+                                    value={useGoogleMaps} 
+                                    onChange={e => setUseGoogleMaps(e.target.value)}
+                                    className="px-6 py-4 rounded-2xl bg-white border border-slate-200 font-black text-xs uppercase tracking-widest outline-none cursor-pointer text-slate-900"
+                                >
+                                    <option value="false">Desactivado (Gratuito)</option>
+                                    <option value="true">Activado (Google Maps)</option>
+                                </select>
+                            </div>
+
+                            {/* API Key Input */}
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Google Maps API Key</label>
+                                <div className="flex gap-4">
+                                    <input 
+                                        type="password" 
+                                        value={googleMapsApiKey}
+                                        onChange={e => setGoogleMapsApiKey(e.target.value)}
+                                        placeholder="AIzaSy..."
+                                        className="flex-1 px-8 py-5 rounded-[2rem] bg-slate-50 border border-slate-200 outline-none font-mono text-slate-900 transition-all shadow-inner"
+                                    />
+                                    <button 
+                                        type="button"
+                                        onClick={handleVerifyApiKey}
+                                        disabled={verifyLoading}
+                                        className="px-8 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                                    >
+                                        {verifyLoading ? 'Verificando...' : 'Verificar Clave'}
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-slate-400 leading-tight">La clave debe tener activadas las siguientes APIs: Maps JavaScript API, Places API, Directions API y Distance Matrix API.</p>
+                            </div>
+
+                            {/* Verification Result Display */}
+                            {verifyStatus && (
+                                <div className={`p-6 rounded-[2rem] border flex items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-300 ${
+                                    verifyStatus.success 
+                                    ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
+                                    : 'bg-red-50 border-red-100 text-red-800'
+                                }`}>
+                                    <div className="mt-0.5">
+                                        {verifyStatus.success ? <ShieldCheck size={20} className="text-emerald-600"/> : <AlertCircle size={20} className="text-red-600"/>}
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-xs font-black uppercase tracking-tight">{verifyStatus.success ? 'Conexión Exitosa' : 'Error de Conexión'}</p>
+                                        <p className="text-xs font-medium leading-relaxed">{verifyStatus.message}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Save Button */}
+                            <div className="pt-6">
+                                <button 
+                                    onClick={handleSaveGoogleMaps} 
+                                    disabled={saving} 
+                                    className="bg-indigo-600 text-white w-full py-6 rounded-[2rem] font-black shadow-2xl shadow-indigo-200 flex items-center justify-center gap-3 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
+                                >
+                                    <Save size={20}/>
+                                    Guardar Ajustes de Mapas
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -502,6 +685,100 @@ const SettingsView = () => {
                     </div>
                 )}
             </div>
+            {isTutorialOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300 text-left">
+                    <div className="bg-white rounded-[3rem] shadow-[0_20px_60px_rgba(0,0,0,0.4)] border border-slate-100 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[85vh]">
+                        {/* Header */}
+                        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+                                    Guía Práctica
+                                </span>
+                                <h3 className="text-3xl font-black text-slate-900 tracking-tighter mt-3">
+                                    Cómo obtener tu API Key de Google Maps
+                                </h3>
+                            </div>
+                            <button 
+                                onClick={() => setIsTutorialOpen(false)}
+                                className="text-slate-400 hover:text-slate-600 transition-colors w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-full"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Content Scroll */}
+                        <div className="flex-1 p-8 space-y-6 overflow-y-auto text-slate-700">
+                            <div className="bg-amber-50 border border-amber-100 p-6 rounded-[2rem] text-amber-800 flex items-start gap-4">
+                                <AlertCircle className="shrink-0 mt-0.5 text-amber-600" size={20} />
+                                <div className="space-y-1">
+                                    <p className="text-xs font-black uppercase tracking-tight">Importante: El servicio es gratuito</p>
+                                    <p className="text-xs font-medium leading-relaxed">
+                                        Google Maps regala <strong>$200 USD mensuales de crédito gratuito</strong>. Para las operaciones de esta app en una pequeña empresa, el consumo es virtualmente cero y no representará ningún cargo a tu tarjeta.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                <div className="flex gap-4">
+                                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">1</div>
+                                    <div>
+                                        <h5 className="font-black text-slate-900 text-base uppercase tracking-tight">Crear cuenta en Google Cloud Console</h5>
+                                        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-1">
+                                            Ingresa a <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-black">Google Cloud Console ↗</a> con cualquier cuenta de Google (Gmail o corporativa) y crea un nuevo proyecto (ej. "BAMX Planner").
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">2</div>
+                                    <div>
+                                        <h5 className="font-black text-slate-900 text-base uppercase tracking-tight">Activar la cuenta de Facturación</h5>
+                                        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-1">
+                                            Ve a la sección <strong>Facturación (Billing)</strong> y vincula una tarjeta de débito/crédito. Esto es obligatorio por seguridad de Google, pero recuerda que el consumo de la app se mantendrá dentro del saldo gratis de $200 USD/mes.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">3</div>
+                                    <div>
+                                        <h5 className="font-black text-slate-900 text-base uppercase tracking-tight">Habilitar las 4 APIs necesarias</h5>
+                                        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-1">
+                                            Busca en la barra superior de Google Cloud Console cada uno de estos nombres y haz clic en <strong>"Habilitar" (Enable)</strong>:
+                                        </p>
+                                        <ul className="list-disc list-inside mt-2 text-xs font-black text-slate-700 uppercase space-y-1 ml-2">
+                                            <li>Maps JavaScript API (Ver los mapas en la app)</li>
+                                            <li>Places API (Buscar y autocompletar direcciones)</li>
+                                            <li>Directions API (Dibujar trazado de calles)</li>
+                                            <li>Distance Matrix API (Cálculo lógico de rutas óptimas)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">4</div>
+                                    <div>
+                                        <h5 className="font-black text-slate-900 text-base uppercase tracking-tight">Obtener tu API Key</h5>
+                                        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-1">
+                                            Ve a <strong>APIs y Servicios ➜ Credenciales</strong>, haz clic en <strong>"+ Crear credenciales" ➜ "Clave de API"</strong>. Copia esa clave de API y pégala directamente en la pantalla de Ajustes.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                            <button
+                                onClick={() => setIsTutorialOpen(false)}
+                                className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                            >
+                                Entendido, Cerrar Guía
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

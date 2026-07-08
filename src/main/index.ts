@@ -6,6 +6,7 @@ import { registerDbHandlers } from './ipc/dbHandlers'
 import { registerPlanningHandlers } from './ipc/planningHandlers'
 import { registerSettingsHandlers } from './ipc/settingsHandlers'
 import { registerWindowHandlers } from './ipc/windowHandlers'
+import { registerGoogleMapsHandlers } from './ipc/googleMapsHandlers'
 
 function createWindow(): void {
   // Crear la ventana del navegador.
@@ -75,6 +76,7 @@ app.whenReady().then(() => {
   registerPlanningHandlers()
   registerSettingsHandlers()
   registerWindowHandlers()
+  registerGoogleMapsHandlers()
 
   // Prueba de IPC
   ipcMain.on('ping', () => console.log('pong'))

@@ -4,6 +4,7 @@ import { Plus, Edit2, Trash2, MapPin, Search, Filter, Map } from 'lucide-react'
 import ConfirmModal from '../ConfirmModal'
 import ItemMapModal from '../ItemMapModal'
 import { Colony } from '../../types'
+import { AddressAutocomplete } from '../AddressAutocomplete'
 
 const ColoniasView = () => {
   const [colonies, setColonies] = useState<Colony[]>([])
@@ -316,12 +317,18 @@ const ColoniasView = () => {
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
                     Ubicación / Punto de Cobro
                   </label>
-                  <input
-                    type="text"
+                  <AddressAutocomplete
                     value={formData.collection_point}
-                    onChange={(e) => setFormData({ ...formData, collection_point: e.target.value })}
-                    placeholder="Dirección o punto de referencia exacto"
-                    className="w-full px-6 py-4 rounded-2xl bg-white border border-slate-200 shadow-sm focus:bg-white focus:border-orange-500/50 focus:ring-[4px] focus:ring-orange-500/10 transition-all outline-none font-bold text-slate-900"
+                    onChange={(val) => setFormData({ ...formData, collection_point: val })}
+                    onSelectPlace={(place) => {
+                      setFormData({
+                        ...formData,
+                        collection_point: place.address,
+                        lat: place.lat,
+                        lng: place.lng
+                      })
+                    }}
+                    placeholder="Dirección o punto de referencia exacto (Autocompletado)"
                   />
                 </div>
                 <div className="space-y-2">

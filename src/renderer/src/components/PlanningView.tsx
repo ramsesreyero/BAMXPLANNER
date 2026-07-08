@@ -370,8 +370,9 @@ const PlanningView = () => {
 
             const plan = await scheduler.generate();
             setMonthlyPlan(plan);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error generating monthly plan:", error);
+            alert("Error al generar el plan mensual: " + (error?.message || error));
         } finally {
             setIsGeneratingMonthly(false);
         }

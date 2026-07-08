@@ -30,6 +30,13 @@ const api = {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),
     set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)
   },
+  googleMaps: {
+    getDistanceMatrix: (points: { lat: number; lng: number }[]) => 
+      ipcRenderer.invoke('google-maps:distance-matrix', points),
+    getDirections: (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, waypoints?: { lat: number; lng: number }[]) => 
+      ipcRenderer.invoke('google-maps:directions', origin, destination, waypoints),
+    verifyKey: (key: string) => ipcRenderer.invoke('google-maps:verify-key', key)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),

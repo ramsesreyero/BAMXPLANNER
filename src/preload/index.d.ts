@@ -28,6 +28,11 @@ declare global {
         get: (key: string) => Promise<any>;
         set: (key: string, value: string) => Promise<any>;
       };
+      googleMaps: {
+        getDistanceMatrix: (points: { lat: number; lng: number }[]) => Promise<{ distances: number[][]; durations: number[][]; success: boolean; error?: string }>;
+        getDirections: (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, waypoints?: { lat: number; lng: number }[]) => Promise<{ data: any; success: boolean; error?: string }>;
+        verifyKey: (key: string) => Promise<{ success: boolean; message: string }>;
+      };
       window: {
         minimize: () => void;
         maximize: () => void;

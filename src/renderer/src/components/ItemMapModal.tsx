@@ -38,8 +38,31 @@ export interface ItemMapModalProps {
     } | null
 }
 
+import { useState } from 'react'
+import GoogleItemMapModal from './GoogleItemMapModal'
+
 const ItemMapModal: React.FC<ItemMapModalProps> = ({ isOpen, onClose, item }) => {
+    const [useGoogleMaps, setUseGoogleMaps] = useState(false)
+
+    useEffect(() => {
+        if (!isOpen) return
+        const checkSettings = async () => {
+            try {
+                const useGM = await window.api.settings.get('use_google_maps')
+                const apiKey = await window.api.settings.get('google_maps_api_key')
+                setUseGoogleMaps(useGM?.value === 'true' && !!apiKey?.value)
+            } catch (e) {
+                console.error("Error al cargar ajustes en ItemMapModal:", e)
+            }
+        }
+        checkSettings()
+    }, [isOpen])
+
     if (!isOpen || !item) return null
+
+    if (useGoogleMaps) {
+        return <GoogleItemMapModal isOpen={isOpen} onClose={onClose} item={item} />
+    }
 
     return createPortal(
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">

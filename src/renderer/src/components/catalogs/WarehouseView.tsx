@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MapPin, Clock, ShieldCheck } from 'lucide-react'
+import { AddressAutocomplete } from '../AddressAutocomplete'
 
 const WarehouseView = () => {
   const [loading, setLoading] = useState(true)
@@ -103,12 +104,17 @@ const WarehouseView = () => {
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
                   Dirección Física
                 </label>
-                <input
-                  type="text"
+                <AddressAutocomplete
                   value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-6 py-4 rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 shadow-sm focus:bg-white dark:focus:bg-slate-800 focus:border-orange-500/50 focus:ring-[4px] focus:ring-orange-500/10 transition-all outline-none font-bold text-slate-900 dark:text-white"
-                  placeholder="Calle, Número, Colonia, CP"
+                  onChange={(val) => setFormData({ ...formData, address: val })}
+                  onSelectPlace={(place) => {
+                    setFormData({
+                      ...formData,
+                      address: place.address,
+                      coordinates: `${place.lat}, ${place.lng}`
+                    })
+                  }}
+                  placeholder="Calle, Número, Colonia, CP (Autocompletado)"
                 />
               </div>
               <div className="space-y-2">

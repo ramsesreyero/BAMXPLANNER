@@ -26,6 +26,8 @@ export interface DistanceMatrixResult {
   durations: number[][];
   /** true si se obtuvo desde OSRM, false si es Haversine */
   fromOSRM: boolean;
+  /** true si se obtuvo desde Google Maps */
+  fromGoogleMaps?: boolean;
 }
 
 // --- Caché de sesión ---
@@ -170,8 +172,9 @@ export async function fetchOSRMMatrix(points: GeoPoint[]): Promise<DistanceMatri
 /**
  * Función principal: obtiene la matriz de distancias real.
  * 1. Revisa caché de sesión.
- * 2. Intenta OSRM.
- * 3. Si falla, usa Haversine.
+ * 2. Intenta Google Maps si está habilitado y tiene una clave válida.
+ * 3. Intenta OSRM como fallback de Google Maps o método por defecto.
+ * 4. Si falla, usa Haversine.
  *
  * @param points  Lista de puntos geográficos (incluyendo el CEDIS al inicio)
  * @returns       DistanceMatrixResult con matrices de distancias y duraciones
@@ -185,7 +188,33 @@ export async function getDistanceMatrix(points: GeoPoint[]): Promise<DistanceMat
     return sessionCache.get(key)!;
   }
 
-  // 2. Intentar OSRM
+  // 2. Intentar Google Maps si está configurado
+  try {
+    const useGM = await window.api.settings.get('use_google_maps');
+    const apiKey = await window.api.settings.get('google_maps_api_key');
+    
+    if (useGM?.value === 'true' && apiKey?.value) {
+      console.log(`[DistanceMatrix] Consultando Google Maps Distance Matrix para ${points.length} puntos...`);
+      const gResult = await window.api.googleMaps.getDistanceMatrix(points);
+      
+      if (gResult && gResult.success) {
+        const result: DistanceMatrixResult = {
+          distances: gResult.distances,
+          durations: gResult.durations,
+          fromOSRM: false,
+          fromGoogleMaps: true
+        };
+        sessionCache.set(key, result);
+        return result;
+      } else {
+        console.warn('[DistanceMatrix] Google Maps falló, intentando OSRM:', gResult?.error);
+      }
+    }
+  } catch (e) {
+    console.error('[DistanceMatrix] Error al verificar ajustes de Google Maps:', e);
+  }
+
+  // 3. Intentar OSRM
   console.log(`[DistanceMatrix] Consultando OSRM para ${points.length} puntos...`);
   const osrmResult = await fetchOSRMMatrix(points);
 
@@ -194,7 +223,7 @@ export async function getDistanceMatrix(points: GeoPoint[]): Promise<DistanceMat
     return osrmResult;
   }
 
-  // 3. Fallback: Haversine
+  // 4. Fallback: Haversine
   console.warn('[DistanceMatrix] Usando Haversine como respaldo (sin conexión a OSRM).');
   const haversineResult = buildHaversineMatrix(points);
   sessionCache.set(key, haversineResult);
@@ -208,3 +237,4 @@ export function clearDistanceCache(): void {
   sessionCache.clear();
   console.log('[DistanceMatrix] Caché limpiado.');
 }
+

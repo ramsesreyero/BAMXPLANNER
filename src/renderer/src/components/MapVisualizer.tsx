@@ -32,9 +32,16 @@ const MapRecenter = ({ lat, lng }: { lat?: number | string; lng?: number | strin
 const MapInvalidator = () => {
     const map = useMap();
     useEffect(() => {
-        setTimeout(() => {
-            map.invalidateSize();
+        const timer = setTimeout(() => {
+            if (map) {
+                try {
+                    map.invalidateSize();
+                } catch (e) {
+                    console.warn("Leaflet map invalidateSize ignored:", e);
+                }
+            }
         }, 300);
+        return () => clearTimeout(timer);
     }, [map]);
     return null;
 };
@@ -68,9 +75,12 @@ const getIcon = (type: string, truck?: 'A' | 'B') => {
 
 interface MapVisualizerProps {
   route: RouteStop[];
+  hideSidebar?: boolean;
 }
 
-export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
+import { GoogleMapVisualizer } from './GoogleMapVisualizer';
+
+export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [], hideSidebar = false }) => {
   console.log("MapVisualizer rendering with route length:", route?.length);
   if (!route) return <div className="p-10 text-slate-500 font-black uppercase text-xs tracking-widest bg-slate-900 h-full flex items-center justify-center">Error: No se proporcionó ruta</div>;
 
@@ -81,6 +91,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
   const [isSimulating, setIsSimulating] = useState(false);
   const [simIndex, setSimIndex] = useState(0);
   const [cedisCoords, setCedisCoords] = useState("27.477850806886945,-99.49498391012905");
+  const [useGoogleMaps, setUseGoogleMaps] = useState(false);
 
   useEffect(() => {
     const fetchCedis = async () => {
@@ -89,12 +100,20 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
         if (setting?.value) {
           setCedisCoords(setting.value);
         }
+        
+        const useGMSetting = await window.api.settings.get('use_google_maps');
+        const apiKeySetting = await window.api.settings.get('google_maps_api_key');
+        setUseGoogleMaps(useGMSetting?.value === 'true' && !!apiKeySetting?.value);
       } catch (e) {
         console.error("Error loading CEDIS coordinates in MapVisualizer:", e);
       }
     };
     fetchCedis();
+    window.addEventListener('settings-updated', fetchCedis);
+    return () => window.removeEventListener('settings-updated', fetchCedis);
   }, []);
+
+
 
   // Calcular cargas acumuladas
   const stopsWithLoad = route.reduce((acc: any[], stop, idx) => {
@@ -179,8 +198,12 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
     fetchFullRoute();
   }, [route]);
 
+  if (useGoogleMaps) {
+    return <GoogleMapVisualizer route={route} hideSidebar={hideSidebar} />;
+  }
+
   const [cLat, cLng] = cedisCoords.split(',').map(s => parseFloat(s.trim()));
-  const center: [number, number] = route.length > 0 && route[0].lat !== undefined && route[0].lng !== undefined
+  const center: [number, number] = route.length > 0 && route[0].lat && route[0].lng
     ? [parseFloat(route[0].lat.toString()), parseFloat(route[0].lng.toString())]
     : [cLat || 27.4778508, cLng || -99.4949839];
 
@@ -189,7 +212,8 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
   return (
     <div className="flex flex-col lg:flex-row w-full h-full border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl bg-slate-950 relative isolate">
       {/* Barra lateral - Cristal Pro */}
-      <div className="w-full lg:w-96 bg-slate-900 border-r border-white/5 flex flex-col h-1/2 lg:h-full relative overflow-hidden rounded-l-[3rem]">
+      {!hideSidebar && (
+        <div className="w-full lg:w-96 bg-slate-900 border-r border-white/5 flex flex-col h-1/2 lg:h-full relative overflow-hidden rounded-l-[3rem]">
         <div className="absolute inset-0 bg-gradient-to-b from-blue-600/5 to-transparent pointer-events-none" />
         
         <div className="p-8 border-b border-white/5 bg-slate-900/50 backdrop-blur-md relative z-10">
@@ -301,6 +325,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
             </button>
         </div>
       </div>
+      )}
 
       {/* MAPA */}
       <div className="flex-1 relative z-0 h-full min-h-0 bg-slate-50 overflow-hidden">
@@ -308,6 +333,27 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [] }) => {
           <div className="absolute top-8 left-1/2 transform -translate-x-1/2 bg-slate-900 border border-slate-700/50 text-white px-8 py-4 rounded-[2rem] font-black text-[10px] tracking-[0.3em] uppercase shadow-2xl z-[1000] flex items-center gap-4 backdrop-blur-xl">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
             Analizando infraestructura vial...
+          </div>
+        )}
+
+        {hideSidebar && (
+          <div className="absolute bottom-10 right-10 bg-slate-900/90 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 shadow-2xl z-[1000] flex items-center gap-4 animate-in fade-in duration-300">
+            <button
+              onClick={() => setIsSimulating(!isSimulating)}
+              className={`px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 active:scale-95 ${
+                isSimulating 
+                  ? 'bg-red-600 text-white hover:bg-red-500 shadow-xl shadow-red-600/20' 
+                  : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl shadow-indigo-600/20'
+              }`}
+            >
+              {isSimulating ? 'Detener Simulación' : 'Simular Trayecto'}
+            </button>
+            {isSimulating && (
+              <div className="flex items-center gap-2 text-slate-700 font-bold">
+                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-ping" />
+                <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider">Paso {simIndex} de {stopsWithLoad.length - 1}</span>
+              </div>
+            )}
           </div>
         )}
 
