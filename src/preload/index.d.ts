@@ -27,6 +27,7 @@ declare global {
       settings: {
         get: (key: string) => Promise<any>;
         set: (key: string, value: string) => Promise<any>;
+        checkUpdates: () => Promise<{ success: boolean; tag_name?: string; html_url?: string; error?: string }>;
       };
       googleMaps: {
         geocode: (address: string) => Promise<{ success: boolean; address?: string; lat?: number; lng?: number; error?: string }>;

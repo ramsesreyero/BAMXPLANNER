@@ -28,7 +28,8 @@ const api = {
   },
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),
-    set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)
+    set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value),
+    checkUpdates: () => ipcRenderer.invoke('settings:check-updates')
   },
   googleMaps: {
     geocode: (address: string) => ipcRenderer.invoke('google-maps:geocode', address),

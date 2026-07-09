@@ -21,4 +21,30 @@ export function registerSettingsHandlers() {
     const db = initDB()
     return db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value)
   })
+
+  ipcMain.handle('settings:check-updates', async () => {
+    try {
+      console.log('--- REQUISICIÓN DE ACTUALIZACIONES ENTRANDO AL PROCESO PRINCIPAL ---')
+      const response = await fetch('https://api.github.com/repos/ramsesreyero/BAMXPLANNER/releases/latest', {
+        headers: {
+          'User-Agent': 'bamx-nuevo-laredo-planner'
+        }
+      })
+      if (!response.ok) {
+        throw new Error(`GitHub API respondió con estado ${response.status}`)
+      }
+      const data = (await response.json()) as { tag_name: string; html_url: string }
+      return {
+        success: true,
+        tag_name: data.tag_name,
+        html_url: data.html_url
+      }
+    } catch (error: any) {
+      console.error('Error checking updates in main process:', error)
+      return {
+        success: false,
+        error: error.message || 'Error de conexión con GitHub.'
+      }
+    }
+  })
 }

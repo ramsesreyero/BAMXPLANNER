@@ -61,13 +61,12 @@ const SettingsView = () => {
     const handleCheckForUpdates = async () => {
         setUpdateStatus({ checked: false, loading: true, newVersionAvailable: false })
         try {
-            const response = await fetch('https://api.github.com/repos/ramsesreyero/BAMXPLANNER/releases/latest')
-            if (!response.ok) {
-                throw new Error('No se pudo conectar al repositorio en GitHub.')
+            const res = await window.api.settings.checkUpdates()
+            if (!res.success) {
+                throw new Error(res.error || 'No se pudo conectar al repositorio en GitHub.')
             }
-            const data = await response.json()
-            const latestTag = data.tag_name || ''
-            const downloadUrl = data.html_url || 'https://github.com/ramsesreyero/BAMXPLANNER/releases'
+            const latestTag = res.tag_name || ''
+            const downloadUrl = res.html_url || 'https://github.com/ramsesreyero/BAMXPLANNER/releases'
             
             const cleanCurrent = currentVersion.replace(/^v/, '')
             const cleanLatest = latestTag.replace(/^v/, '')
