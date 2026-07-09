@@ -13,12 +13,12 @@ export const exportRouteToPDF = (route: any) => {
     doc.setFontSize(24)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(darkColor[0], darkColor[1], darkColor[2])
-    doc.text('BAMX Neural Planner', 14, 25)
+    doc.text('BAMX Planner', 14, 25)
 
     doc.setFontSize(12)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(100, 100, 100)
-    doc.text('Manifiesto de Ruta Logística', 14, 32)
+    doc.text('Hoja de ruta para conductor', 14, 32)
 
     // Caja de resumen de la ruta
     doc.setDrawColor(200, 200, 200)
@@ -28,18 +28,18 @@ export const exportRouteToPDF = (route: any) => {
     doc.setFontSize(10)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(darkColor[0], darkColor[1], darkColor[2])
-    doc.text('INFORMACIÓN DE LA RUTA', 20, 50)
+    doc.text('DATOS DE LA RUTA', 20, 50)
 
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(50, 50, 50)
     doc.text(`Fecha: ${route.date}`, 20, 60)
-    doc.text(`Identificador de Ruta: #${route.id} (${route.type || 'Entrega'})`, 20, 67)
+    doc.text(`Ruta: #${route.id} (${route.type || 'Entrega'})`, 20, 67)
     
     const truckInfo = route.truck_name || (route.truck ? `${route.truck.brand} ${route.truck.model}` : `ID ${route.truck_id}`)
     const driverInfo = route.driver_name || (route.driver ? route.driver.name : `ID ${route.driver_id}`)
     
-    doc.text(`Unidad Activa: ${truckInfo}`, 100, 60)
-    doc.text(`Chofer Asignado: ${driverInfo}`, 100, 67)
+    doc.text(`Unidad: ${truckInfo}`, 100, 60)
+    doc.text(`Chofer: ${driverInfo}`, 100, 67)
 
     // Preparar datos de la tabla
     let currentY = 90
@@ -59,7 +59,7 @@ export const exportRouteToPDF = (route: any) => {
             stopsData.push([
                 idx + 1,
                 stop.stop_type || stop.type,
-                stop.stop_name || stop.name || `ID ${stop.stop_id}`,
+                `${stop.stop_name || stop.name || `ID ${stop.stop_id}`}${stop.lat && stop.lng ? `\nMaps: https://www.google.com/maps?q=${stop.lat},${stop.lng}` : ''}`,
                 stop.volume ? `${stop.volume} Unidades` : 'Por definir',
                 stop.recovery_fee > 0 ? `$${stop.recovery_fee}` : '-',
                 '' // Firma
@@ -78,11 +78,11 @@ export const exportRouteToPDF = (route: any) => {
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2])
-    doc.text('Itinerario de Recolección', 14, currentY - 5)
+    doc.text('Itinerario', 14, currentY - 5)
 
     autoTable(doc, {
         startY: currentY,
-        head: [['Paso', 'Tipo', 'Destino / Ubicación', 'Volumen Est.', 'Cuota', 'Firma de Recibido']],
+        head: [['Paso', 'Tipo', 'Destino / ubicación', 'Volumen', 'Cuota', 'Firma']],
         body: stopsData,
         theme: 'grid',
         headStyles: {
@@ -109,8 +109,8 @@ export const exportRouteToPDF = (route: any) => {
     const finalY = (doc as any).lastAutoTable.finalY + 20
     doc.setFontSize(8)
     doc.setTextColor(150, 150, 150)
-    doc.text('ESTE DOCUMENTO ES DE USO INTERNO LOGÍSTICO Y REPRESENTA EL PLAN APROBADO POR COMANDO CENTRAL.', 14, finalY)
-    doc.text('Generado por BAMX Planner Pro', 14, finalY + 5)
+    doc.text('Documento de uso interno. Confirma cambios con la persona responsable de planeación.', 14, finalY)
+    doc.text('Generado por BAMX Planner', 14, finalY + 5)
 
     // Guardar
     doc.save(`Ruta_BAMX_${route.date}_U${route.truck_id}.pdf`)
@@ -125,16 +125,16 @@ export const exportMonthlyPlanToPDF = (plan: any, monthName: string, year: numbe
     doc.setFontSize(30)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(darkColor[0], darkColor[1], darkColor[2])
-    doc.text('BAMX Neural Planner', pageWidth / 2, 80, { align: 'center' })
+    doc.text('BAMX Planner', pageWidth / 2, 80, { align: 'center' })
     
     doc.setFontSize(20)
     doc.setTextColor(249, 115, 22) // naranja-500
-    doc.text(`Planificación Mensual: ${monthName} ${year}`, pageWidth / 2, 95, { align: 'center' })
+    doc.text(`Planeación mensual: ${monthName} ${year}`, pageWidth / 2, 95, { align: 'center' })
     
     doc.setFontSize(12)
     doc.setTextColor(100, 100, 100)
     doc.setFont('helvetica', 'normal')
-    doc.text('Este documento contiene el itinerario completo proyectado para el periodo especificado.', pageWidth / 2, 110, { align: 'center' })
+    doc.text('Itinerario de rutas guardadas para el periodo seleccionado.', pageWidth / 2, 110, { align: 'center' })
     
     // Agregar pagina para cada dia con rutas
     plan.days.forEach((day: any, idx: number) => {
@@ -154,7 +154,7 @@ export const exportMonthlyPlanToPDF = (plan: any, monthName: string, year: numbe
         if (day.truckA.stops.length > 0) {
             doc.setFontSize(12)
             doc.setTextColor(249, 115, 22)
-            doc.text('UNIDAD A - JUAN', 14, currentY)
+            doc.text(`RUTA A${day.truckA.driverName ? ` - ${day.truckA.driverName}` : ''}`, 14, currentY)
             
             const stopsA = [
                 ['▶', 'Almacén', 'CEDIS BAMX (Salida)'],
@@ -181,7 +181,7 @@ export const exportMonthlyPlanToPDF = (plan: any, monthName: string, year: numbe
             }
             doc.setFontSize(12)
             doc.setTextColor(37, 99, 235) // azul-600
-            doc.text('UNIDAD B - GENERAL', 14, currentY)
+            doc.text(`RUTA B${day.truckB.driverName ? ` - ${day.truckB.driverName}` : ''}`, 14, currentY)
             
             const stopsB = [
                 ['▶', 'Almacén', 'CEDIS BAMX (Salida)'],
@@ -201,4 +201,3 @@ export const exportMonthlyPlanToPDF = (plan: any, monthName: string, year: numbe
 
     doc.save(`Plan_BAMX_${monthName}_${year}.pdf`)
 }
-

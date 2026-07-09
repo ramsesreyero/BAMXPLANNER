@@ -86,6 +86,8 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [], hideSi
 
   const [polylineA, setPolylineA] = useState<[number, number][]>([]);
   const [polylineB, setPolylineB] = useState<[number, number][]>([]);
+  const [showUnitA, setShowUnitA] = useState(true);
+  const [showUnitB, setShowUnitB] = useState(true);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [selectedStopIndex, setSelectedStopIndex] = useState<number | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -366,7 +368,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [], hideSi
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
 
-          {polylineA.length > 0 && (
+          {showUnitA && polylineA.length > 0 && (
             <Polyline 
               positions={polylineA} 
               color="#ea580c" // Naranja-600 para camion A
@@ -399,7 +401,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [], hideSi
             return null;
           })()}
 
-          {polylineB.length > 0 && (
+          {showUnitB && polylineB.length > 0 && (
             <Polyline 
               positions={polylineB} 
               color="#2563eb" // Azul-600 para camion B
@@ -413,6 +415,8 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [], hideSi
           {stopsWithLoad.map((stop, index) => {
             if (!stop.lat || !stop.lng) return null;
             
+            const isVisible = (stop as any).truck === 'A' ? showUnitA : (stop as any).truck === 'B' ? showUnitB : true;
+            if (!isVisible) return null;
 
             return (
               <Marker 
@@ -466,18 +470,26 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [], hideSi
         </MapContainer>
 
         {/* LEYENDA FLOTANTE PREMIUM */}
-        <div className="absolute bottom-10 left-10 bg-white/80 backdrop-blur-2xl p-6 rounded-[2.5rem] border border-white text-slate-900 shadow-2xl z-[1000] hidden sm:block">
+        <div className="absolute bottom-10 left-10 bg-white/95 backdrop-blur-2xl p-6 rounded-[2.5rem] border border-white text-slate-900 shadow-2xl z-[1000] hidden sm:block">
             <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Monitor Logístico</h6>
-            <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-1 bg-orange-500 rounded-full" />
-                    <span className="text-[10px] font-black uppercase tracking-tight">Ruta Unidad A</span>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-1 bg-blue-500 rounded-full" />
-                    <span className="text-[10px] font-black uppercase tracking-tight">Ruta Unidad B</span>
-                </div>
-                <div className="flex items-center gap-3">
+            <div className="space-y-4">
+                <button
+                  onClick={() => setShowUnitA(!showUnitA)}
+                  className={`flex items-center gap-3 w-full text-left p-1.5 rounded-xl hover:bg-slate-100/80 transition-all ${!showUnitA ? 'opacity-40' : ''}`}
+                >
+                    <div className="w-10 h-3 bg-orange-500 rounded-full" />
+                    <span className="text-[10px] font-black uppercase tracking-tight flex-1">Unidad A</span>
+                    <input type="checkbox" checked={showUnitA} readOnly className="h-3 w-3 accent-orange-600 rounded cursor-pointer" />
+                </button>
+                <button
+                  onClick={() => setShowUnitB(!showUnitB)}
+                  className={`flex items-center gap-3 w-full text-left p-1.5 rounded-xl hover:bg-slate-100/80 transition-all ${!showUnitB ? 'opacity-40' : ''}`}
+                >
+                    <div className="w-10 h-3 bg-blue-500 rounded-full" />
+                    <span className="text-[10px] font-black uppercase tracking-tight flex-1">Unidad B</span>
+                    <input type="checkbox" checked={showUnitB} readOnly className="h-3 w-3 accent-blue-600 rounded cursor-pointer" />
+                </button>
+                <div className="flex items-center gap-3 p-1.5">
                     <div className="w-4 h-4 rounded-lg bg-red-500 shadow-lg shadow-red-500/30" />
                     <span className="text-[10px] font-black uppercase tracking-tight">CEDIS BAMX</span>
                 </div>

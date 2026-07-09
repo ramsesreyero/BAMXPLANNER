@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS beneficiaries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL, -- Ruta de la caridad
   address TEXT,
+  restriction_day TEXT DEFAULT 'Ninguna',
   avg_delivery_time REAL DEFAULT 0, -- minutos
   lat REAL,
   lng REAL,

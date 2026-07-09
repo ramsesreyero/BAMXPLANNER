@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Plus, Edit2, Trash2, Building2, Search, Filter, Map } from 'lucide-react'
 import ConfirmModal from './ConfirmModal'
 import ItemMapModal from './ItemMapModal'
+import { LocationPicker } from './LocationPicker'
 
 interface Institution {
   id: number
@@ -314,7 +315,7 @@ const InstitutionsView = () => {
       {/* Ventana modal */}
       {isModalOpen && createPortal(
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] shadow-2xl border border-white/20 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-300">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-white/20 w-full max-w-3xl max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
             <div className="p-10 border-b border-slate-100 relative">
               <h3 className="text-3xl font-black text-slate-900 tracking-tighter">
                 {editingInstitution ? 'Editar' : 'Nueva'}{' '}
@@ -327,7 +328,7 @@ const InstitutionsView = () => {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-10 space-y-6">
+            <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto">
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -341,17 +342,22 @@ const InstitutionsView = () => {
                     className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none font-bold text-slate-900"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
-                    Dirección
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none font-bold text-slate-900"
-                  />
-                </div>
+                <LocationPicker
+                  addressLabel="Dirección"
+                  addressValue={formData.address}
+                  onAddressChange={(value) => setFormData({ ...formData, address: value })}
+                  lat={formData.lat}
+                  lng={formData.lng}
+                  tone="emerald"
+                  onLocationChange={(location) =>
+                    setFormData({
+                      ...formData,
+                      address: location.address ?? formData.address,
+                      lat: location.lat,
+                      lng: location.lng
+                    })
+                  }
+                />
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -387,30 +393,6 @@ const InstitutionsView = () => {
                       onChange={(e) =>
                         setFormData({ ...formData, delivery_time: parseFloat(e.target.value) || 0 })
                       }
-                      className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none font-bold text-slate-900"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
-                      Latitud
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={formData.lat}
-                      onChange={(e) => setFormData({ ...formData, lat: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none font-bold text-slate-900"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
-                      Longitud
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={formData.lng}
-                      onChange={(e) => setFormData({ ...formData, lng: parseFloat(e.target.value) || 0 })}
                       className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none font-bold text-slate-900"
                     />
                   </div>

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Plus, Edit2, Trash2, MapPin, Search, Filter, Map } from 'lucide-react'
 import ConfirmModal from './ConfirmModal'
 import ItemMapModal from './ItemMapModal'
+import { LocationPicker } from './LocationPicker'
 
 interface Colony {
   id: number
@@ -338,7 +339,7 @@ const ColoniasView = () => {
       {/* Modal premium */}
       {isModalOpen && createPortal(
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] shadow-2xl border border-white/20 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-300">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-white/20 w-full max-w-3xl max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
             <div className="p-10 border-b border-slate-100 relative">
               <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-3xl -mr-16 -mt-16 pointer-events-none" />
               <h3 className="text-3xl font-black text-slate-900 tracking-tighter relative z-10">
@@ -352,7 +353,7 @@ const ColoniasView = () => {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-10 space-y-6">
+            <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto">
               <div className="grid grid-cols-2 gap-6">
                 <div className="col-span-2 space-y-2">
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -393,16 +394,22 @@ const ColoniasView = () => {
                     className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900"
                   />
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
-                    Ubicación / Punto de Cobro
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.collection_point}
-                    onChange={(e) => setFormData({ ...formData, collection_point: e.target.value })}
-                    placeholder="Dirección o punto de referencia exacto"
-                    className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900"
+                <div className="col-span-2">
+                  <LocationPicker
+                    addressLabel="Punto de entrega / referencia"
+                    addressValue={formData.collection_point}
+                    onAddressChange={(value) => setFormData({ ...formData, collection_point: value })}
+                    lat={formData.lat}
+                    lng={formData.lng}
+                    tone="orange"
+                    onLocationChange={(location) =>
+                      setFormData({
+                        ...formData,
+                        collection_point: location.address ?? formData.collection_point,
+                        lat: location.lat,
+                        lng: location.lng
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -430,32 +437,6 @@ const ColoniasView = () => {
                     value={formData.frequency}
                     onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
                     placeholder="Ej. Quincenal"
-                    className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
-                    Latitud
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formData.lat}
-                    onChange={(e) => setFormData({ ...formData, lat: parseFloat(e.target.value) || 0 })}
-                    placeholder="27.48..."
-                    className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
-                    Longitud
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formData.lng}
-                    onChange={(e) => setFormData({ ...formData, lng: parseFloat(e.target.value) || 0 })}
-                    placeholder="-99.51..."
                     className="w-full px-6 py-4 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900"
                   />
                 </div>

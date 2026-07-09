@@ -251,6 +251,7 @@ export function registerPlanningHandlers() {
             if (stop.type === 'supermarket') dbType = 'Supermercado'
             else if (stop.type === 'institution') dbType = 'Institución'
             else if (stop.type === 'beneficiary') dbType = 'Beneficiario'
+            else if (stop.type === 'warehouse') dbType = 'Almacén'
             insertStop.run(infoA.lastInsertRowid, dbType, stop.id, idx + 1)
           })
         }
@@ -261,6 +262,7 @@ export function registerPlanningHandlers() {
             if (stop.type === 'supermarket') dbType = 'Supermercado'
             else if (stop.type === 'institution') dbType = 'Institución'
             else if (stop.type === 'beneficiary') dbType = 'Beneficiario'
+            else if (stop.type === 'warehouse') dbType = 'Almacén'
             insertStop.run(infoB.lastInsertRowid, dbType, stop.id, idx + 1)
           })
         }
@@ -304,6 +306,23 @@ export function registerPlanningHandlers() {
           if (details.avg_volume !== undefined) details.volume = details.avg_volume
         } else if (stop.stop_type === 'Beneficiario') {
           details = db.prepare('SELECT * FROM beneficiaries WHERE id = ?').get(stop.stop_id) || {}
+        } else if (stop.stop_type === 'Almacén') {
+          const w = db.prepare('SELECT * FROM warehouse WHERE id = 1').get() as any || {}
+          let lat = 27.477850806886945
+          let lng = -99.49498391012905
+          if (w.coordinates) {
+            const parts = w.coordinates.split(',').map((p: string) => parseFloat(p.trim()))
+            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+              lat = parts[0]
+              lng = parts[1]
+            }
+          }
+          details = {
+            name: 'CEDIS BAMX (Almacén Central)',
+            lat,
+            lng,
+            volume: 0
+          }
         }
 
         detailedStops.push({
@@ -405,6 +424,22 @@ export function registerPlanningHandlers() {
           details = db.prepare('SELECT * FROM supermarkets WHERE id = ?').get(stop.stop_id)
         } else if (stop.stop_type === 'Beneficiario') {
           details = db.prepare('SELECT * FROM beneficiaries WHERE id = ?').get(stop.stop_id)
+        } else if (stop.stop_type === 'Almacén') {
+          const w = db.prepare('SELECT * FROM warehouse WHERE id = 1').get() as any || {}
+          let lat = 27.477850806886945
+          let lng = -99.49498391012905
+          if (w.coordinates) {
+            const parts = w.coordinates.split(',').map((p: string) => parseFloat(p.trim()))
+            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+              lat = parts[0]
+              lng = parts[1]
+            }
+          }
+          details = {
+            name: 'CEDIS BAMX (Almacén Central)',
+            lat,
+            lng
+          }
         }
 
         detailedStops.push({
@@ -412,7 +447,8 @@ export function registerPlanningHandlers() {
           name: details ? details.name : `Punto ${stop.stop_id}`,
           type: stop.stop_type.toLowerCase() === 'supermercado' ? 'supermarket' : 
                 stop.stop_type.toLowerCase() === 'institución' ? 'institution' :
-                stop.stop_type.toLowerCase() === 'beneficiario' ? 'beneficiary' : 'colony',
+                stop.stop_type.toLowerCase() === 'beneficiario' ? 'beneficiary' : 
+                stop.stop_type.toLowerCase() === 'almacén' ? 'warehouse' : 'colony',
           lat: details?.lat || 0,
           lng: details?.lng || 0
         })

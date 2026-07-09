@@ -12,12 +12,22 @@
  *  6. Cronograma con hora estimada de llegada/salida por parada.
  */
 
-import { RouteStop, GeneticRouting, GeneticRouteResult } from './geneticRouting';
-import { getDistanceMatrix, GeoPoint } from './distanceMatrix';
+import { RouteStop, GeneticRouting } from './geneticRouting';
+import { getDistanceMatrix } from './distanceMatrix';
 
 export interface MonthlyPlan {
   days: DailyRoster[];
   monthName: string;
+  warnings?: PlanWarning[];
+}
+
+export interface PlanWarning {
+  type: 'reprogrammed' | 'omitted';
+  stopName: string;
+  stopType: RouteStop['type'];
+  originalDate: string;
+  newDate?: string;
+  reason: string;
 }
 
 export interface DailyRoster {
@@ -30,6 +40,8 @@ export interface TruckRoute {
   stops: RouteStop[];
   driverId?: number | null;
   truckId?: number | null;
+  truckCapacityKg?: number;
+  driverMaxMinutes?: number;
   stats?: {
     distanceKm: number;
     durationMinutes: number;
@@ -38,14 +50,24 @@ export interface TruckRoute {
   };
 }
 
+interface PendingStop {
+  stop: RouteStop;
+  originalDate: string;
+  preferredTruck: 'truckA' | 'truckB';
+  allowedDays?: string | null;
+  restrictedDays?: string | null;
+  reason: string;
+}
+
 // ─── Constantes operativas BAMX ───────────────────────────────────────────────
 
 /** Coordenadas reales del CEDIS: C. Iturbide 1407, San José, 88230 Nuevo Laredo, Tamps. */
 const DEFAULT_CEDIS_LAT = 27.477850806886945;
 const DEFAULT_CEDIS_LNG = -99.49498391012905;
 
-const TRUCK_CAPACITY_KG = 3000;
-const START_TIME = '07:00';
+const DEFAULT_TRUCK_CAPACITY_KG = 3000;
+const DEFAULT_START_TIME = '07:00';
+const DEFAULT_END_TIME = '18:00';
 
 // ─── Clase Principal ──────────────────────────────────────────────────────────
 
@@ -65,6 +87,10 @@ export class MonthlyScheduler {
   private cedisLng: number;
   /** Máximo de paradas por camión por día (configurable en Ajustes > Algoritmo) */
   private maxStopsPerTruck: number;
+  private openingTime: string;
+  private closingTime: string;
+  private avgUnloadingTime: number;
+  private pendingStops: PendingStop[] = [];
 
   constructor(config: {
     startDate?: string;
@@ -82,6 +108,9 @@ export class MonthlyScheduler {
     cedisLng?: number;
     /** Máximo de paradas por camión por día. Default: 10. Configurable en Ajustes > Algoritmo. */
     maxStopsPerTruck?: number;
+    openingTime?: string;
+    closingTime?: string;
+    avgUnloadingTime?: number;
   }) {
     if (config.startDate) {
       const [y, m] = config.startDate.split('-').map(Number);
@@ -111,6 +140,9 @@ export class MonthlyScheduler {
     this.cedisLng = config.cedisLng ?? DEFAULT_CEDIS_LNG;
     // Límite de paradas por camión por día
     this.maxStopsPerTruck = Number(config.maxStopsPerTruck ?? 10);
+    this.openingTime = config.openingTime || DEFAULT_START_TIME;
+    this.closingTime = config.closingTime || DEFAULT_END_TIME;
+    this.avgUnloadingTime = Number(config.avgUnloadingTime ?? 20);
   }
 
   // ─── Helper: verificar capacidad de paradas ─────────────────────────────────
@@ -120,6 +152,144 @@ export class MonthlyScheduler {
     return truck.stops.length < this.maxStopsPerTruck;
   }
 
+  private getTruckCapacity(truck: TruckRoute): number {
+    return Number(truck.truckCapacityKg ?? DEFAULT_TRUCK_CAPACITY_KG);
+  }
+
+
+  private canAddLoad(truck: TruckRoute, stop: RouteStop): boolean {
+    const capacity = this.getTruckCapacity(truck);
+    let collectionLoad = 0;
+    let deliveryLoad = 0;
+    for (const s of truck.stops) {
+      if (s.demand > 0) {
+        collectionLoad += s.demand;
+      } else {
+        deliveryLoad += Math.abs(s.demand);
+      }
+    }
+
+    if (stop.demand > 0) {
+      collectionLoad += stop.demand;
+    } else {
+      deliveryLoad += Math.abs(stop.demand);
+    }
+
+    return collectionLoad <= capacity && deliveryLoad <= capacity;
+  }
+
+  private canReceiveStop(truck: TruckRoute, stop: RouteStop): boolean {
+    return this.hasCapacity(truck) && this.canAddLoad(truck, stop);
+  }
+
+  private addStopOrQueue(
+    day: DailyRoster,
+    preferredTruck: 'truckA' | 'truckB',
+    stop: RouteStop,
+    options: {
+      allowedDays?: string | null;
+      restrictedDays?: string | null;
+      reason: string;
+    }
+  ): boolean {
+    const primary = day[preferredTruck];
+    const secondaryKey = preferredTruck === 'truckA' ? 'truckB' : 'truckA';
+    const secondary = day[secondaryKey];
+
+    if (this.canReceiveStop(primary, stop)) {
+      primary.stops.push(stop);
+      if (stop.type === 'colony' || stop.type === 'institution') {
+        console.log(`[Scheduler] Asignado: "${stop.name}" (${stop.type}, ${Math.abs(stop.demand)} kg) en ${day.date} (${preferredTruck})`);
+      }
+      return true;
+    }
+
+    if (this.canReceiveStop(secondary, stop)) {
+      secondary.stops.push(stop);
+      if (stop.type === 'colony' || stop.type === 'institution') {
+        console.log(`[Scheduler] Asignado: "${stop.name}" (${stop.type}, ${Math.abs(stop.demand)} kg) en ${day.date} (${secondaryKey} - Alternativo)`);
+      }
+      return true;
+    }
+
+    if (stop.type === 'colony' || stop.type === 'institution') {
+      console.log(`[Scheduler] Sin capacidad hoy: "${stop.name}" (${stop.type}, ${Math.abs(stop.demand)} kg) en ${day.date}. Se mueve a pendientes.`);
+    }
+    this.pendingStops.push({
+      stop,
+      originalDate: day.date,
+      preferredTruck,
+      allowedDays: options.allowedDays,
+      restrictedDays: options.restrictedDays,
+      reason: options.reason
+    });
+    return false;
+  }
+
+  private processPendingStops(plan: MonthlyPlan): void {
+    if (this.pendingStops.length === 0) return;
+
+    // Ordenar paradas pendientes por demanda descendente (First-Fit Decreasing)
+    // para colocar primero los cargamentos más grandes en los días con espacio.
+    this.pendingStops.sort((a, b) => Math.abs(b.stop.demand) - Math.abs(a.stop.demand));
+
+    const warnings: PlanWarning[] = plan.warnings || [];
+
+    for (const pending of this.pendingStops) {
+      const candidateDays = plan.days.filter(day => {
+        if (day.date <= pending.originalDate) return false;
+        const dow = new Date(day.date + 'T12:00:00').getDay();
+        if (dow === 0 || this.nonWorkingDays.includes(day.date)) return false;
+        if (pending.allowedDays && !this.matchesDayOfWeek(pending.allowedDays, dow)) return false;
+        if (pending.restrictedDays && this.isRestrictedForDay(pending.restrictedDays, dow)) return false;
+        if (this.dayHasStop(day, pending.stop)) return false;
+        return true;
+      });
+
+      let placedDate: string | undefined;
+      for (const day of candidateDays) {
+        const primary = day[pending.preferredTruck];
+        const secondary = pending.preferredTruck === 'truckA' ? day.truckB : day.truckA;
+        const stop = {
+          ...pending.stop,
+          reprogrammedFrom: pending.originalDate,
+          planningNote: `Reprogramado desde ${pending.originalDate}`
+        };
+
+        if (this.canReceiveStop(primary, stop)) {
+          primary.stops.push(stop);
+          placedDate = day.date;
+          if (stop.type === 'colony' || stop.type === 'institution') {
+            console.log(`[Scheduler] Reprogramado: "${stop.name}" (${stop.type}, ${Math.abs(stop.demand)} kg) de ${pending.originalDate} a ${day.date} (${pending.preferredTruck})`);
+          }
+          break;
+        }
+        if (this.canReceiveStop(secondary, stop)) {
+          secondary.stops.push(stop);
+          placedDate = day.date;
+          if (stop.type === 'colony' || stop.type === 'institution') {
+            console.log(`[Scheduler] Reprogramado: "${stop.name}" (${stop.type}, ${Math.abs(stop.demand)} kg) de ${pending.originalDate} a ${day.date} (${pending.preferredTruck === 'truckA' ? 'truckB' : 'truckA'} - Alternativo)`);
+          }
+          break;
+        }
+      }
+
+      warnings.push({
+        type: placedDate ? 'reprogrammed' : 'omitted',
+        stopName: pending.stop.name || `Punto ${pending.stop.id}`,
+        stopType: pending.stop.type,
+        originalDate: pending.originalDate,
+        newDate: placedDate,
+        reason: placedDate
+          ? `${pending.reason}. Se movió al siguiente día válido con capacidad.`
+          : `${pending.reason}. No hubo otro día válido con capacidad dentro del mes.`
+      });
+    }
+
+    plan.warnings = warnings;
+    this.pendingStops = [];
+  }
+
   // ─── Generación del Plan ──────────────────────────────────────────────────
 
   /**
@@ -127,31 +297,54 @@ export class MonthlyScheduler {
    * La función es async porque consulta la API de OSRM para cada día.
    */
   public async generate(): Promise<MonthlyPlan> {
+    this.pendingStops = [];
     const plan: MonthlyPlan = {
       days: [],
-      monthName: this.startDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })
+      monthName: this.startDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' }),
+      warnings: []
     };
 
     const diffMs = this.endDate.getTime() - this.startDate.getTime();
     const numDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1;
 
     // Inicializar días del mes
+    const sortedTrucks = [...this.trucks].sort((a, b) => (b.capacity_kg ?? 0) - (a.capacity_kg ?? 0));
+    const usableUnitsCount = Math.min(this.trucks.length, this.drivers.length);
+    const defaultTruckA = sortedTrucks[0];
+    const defaultTruckB = usableUnitsCount >= 2 ? sortedTrucks[1] ?? sortedTrucks[0] : undefined;
     for (let i = 0; i < numDays; i++) {
       const d = new Date(this.startDate);
       d.setDate(this.startDate.getDate() + i);
       plan.days.push({
         date: d.toISOString().split('T')[0],
-        truckA: { stops: [] },
-        truckB: { stops: [] }
+        truckA: {
+          stops: [],
+          truckCapacityKg: Number(defaultTruckA?.capacity_kg || DEFAULT_TRUCK_CAPACITY_KG)
+        },
+        truckB: {
+          stops: [],
+          truckCapacityKg: defaultTruckB ? Number(defaultTruckB.capacity_kg || DEFAULT_TRUCK_CAPACITY_KG) : 0
+        }
       });
     }
 
     // 1. Asignación heurística de paradas por día y camión
-    if (this.supermarkets.length > 0) this.scheduleSupermarkets(plan);
-    if (this.institutions.length > 0) this.scheduleInstitutions(plan);
     if (this.colonies.length > 0) this.scheduleColonies(plan);
-    // Caridad se inserta de oportunidad DESPUÉS de las rutas base
+    if (this.institutions.length > 0) this.scheduleInstitutions(plan);
+    
+    // Primera pasada: procesar y acomodar colonias e instituciones pendientes (que tienen prioridad)
+    this.processPendingStops(plan);
+    
+    if (this.supermarkets.length > 0) this.scheduleSupermarkets(plan);
+    
+    // Segunda pasada: procesar supermercados u otras paradas que hayan quedado pendientes
+    this.processPendingStops(plan);
+    
+    // Caridad se inserta de oportunidad DESPUÉS de todas las rutas y reprogramaciones base
     if (this.caridad.length > 0) this.insertCaridadOportunista(plan);
+
+    // Balancear carga de trabajo diaria entre choferes (Driver Workload Equity)
+    this.balanceDailyWorkloads(plan);
 
     // Garantía absoluta de límite de paradas por camión por día (Safety Net)
     for (const day of plan.days) {
@@ -191,50 +384,127 @@ export class MonthlyScheduler {
   private async optimizeSingleRoute(truck: TruckRoute): Promise<void> {
     if (truck.stops.length < 2) return;
 
+    const collections = truck.stops.filter(s => s.demand > 0);
+    const deliveries = truck.stops.filter(s => s.demand < 0);
+
     const warehouseStop: RouteStop = {
-      id: 0,
+      id: 1, // El almacén central tiene ID 1 en la base de datos
       name: 'CEDIS BAMX (C. Iturbide 1407, San José, 88230 Nuevo Laredo)',
       type: 'warehouse',
       demand: 0,
       lat: this.cedisLat,
       lng: this.cedisLng,
-      serviceTimeMinutes: 20
+      serviceTimeMinutes: this.avgUnloadingTime
     };
 
-    const allStops: RouteStop[] = [warehouseStop, ...truck.stops];
+    let finalRouteStops: RouteStop[] = [];
+    let totalDist = 0;
+    let totalDuration = 0;
+    let fromOSRM = true;
+    let optimized = true;
 
-    // Preparar puntos geográficos para la matriz de distancias
-    const geoPoints: GeoPoint[] = allStops.map(s => ({
-      lat: s.lat ?? this.cedisLat,
-      lng: s.lng ?? this.cedisLng,
-      id: s.id,
-      name: s.name
-    }));
+    // Fase 1: Optimizar la Recolección (Supermercados)
+    if (collections.length > 0) {
+      const stopsForColl = [warehouseStop, ...collections];
+      const geoPoints = stopsForColl.map(s => ({
+        lat: s.lat ?? this.cedisLat,
+        lng: s.lng ?? this.cedisLng,
+        id: s.id,
+        name: s.name
+      }));
+      const matrix = await getDistanceMatrix(geoPoints);
+      
+      const ga = new GeneticRouting({
+        stops: stopsForColl,
+        distances: matrix.distances,
+        durations: matrix.durations,
+        truckCapacity: this.getTruckCapacity(truck),
+        numGenerations: this.gaConfig.numGenerations,
+        popSize: this.gaConfig.popSize,
+        mutationRate: this.gaConfig.mutationRate,
+        startTime: this.openingTime
+      });
+      
+      const result = ga.run();
+      if (result.isValid) {
+        // Filtrar el almacén del inicio y final de esta sub-ruta
+        const intermediate = result.route.filter(s => s.type !== 'warehouse');
+        finalRouteStops.push(...intermediate);
+        totalDist += result.totalDistance;
+        totalDuration += result.totalDurationMinutes;
+        fromOSRM = fromOSRM && matrix.fromOSRM;
+      } else {
+        optimized = false;
+      }
+    }
 
-    // Obtener matriz de distancias (OSRM o Haversine)
-    const matrixResult = await getDistanceMatrix(geoPoints);
+    // Agregar retorno intermedio al CEDIS si hay ambas fases
+    if (collections.length > 0 && deliveries.length > 0) {
+      finalRouteStops.push({
+        ...warehouseStop,
+        name: 'CEDIS BAMX (Retorno para descarga/recarga)',
+        serviceTimeMinutes: this.avgUnloadingTime
+      });
+    }
 
-    const ga = new GeneticRouting({
-      stops: allStops,
-      distances: matrixResult.distances,
-      durations: matrixResult.durations,
-      truckCapacity: TRUCK_CAPACITY_KG,
-      numGenerations: this.gaConfig.numGenerations,
-      popSize: this.gaConfig.popSize,
-      mutationRate: this.gaConfig.mutationRate,
-      startTime: START_TIME
-    });
+    // Fase 2: Optimizar la Distribución (Colonias, Instituciones, Beneficiarios)
+    if (deliveries.length > 0) {
+      const stopsForDeliv = [warehouseStop, ...deliveries];
+      const geoPoints = stopsForDeliv.map(s => ({
+        lat: s.lat ?? this.cedisLat,
+        lng: s.lng ?? this.cedisLng,
+        id: s.id,
+        name: s.name
+      }));
+      const matrix = await getDistanceMatrix(geoPoints);
 
-    const result: GeneticRouteResult = ga.run();
+      // Calcular hora de inicio de la fase de distribución
+      let deliveryStartTime = this.openingTime;
+      if (collections.length > 0) {
+        const startMin = this.timeToMinutes(this.openingTime) + totalDuration;
+        deliveryStartTime = this.minutesToTime(startMin);
+      }
 
-    if (result.isValid) {
-      truck.stops = result.route.filter(s => s.type !== 'warehouse');
+      const ga = new GeneticRouting({
+        stops: stopsForDeliv,
+        distances: matrix.distances,
+        durations: matrix.durations,
+        truckCapacity: this.getTruckCapacity(truck),
+        numGenerations: this.gaConfig.numGenerations,
+        popSize: this.gaConfig.popSize,
+        mutationRate: this.gaConfig.mutationRate,
+        startTime: deliveryStartTime
+      });
+
+      const result = ga.run();
+      if (result.isValid) {
+        // Filtrar el almacén del inicio y final de esta sub-ruta
+        const intermediate = result.route.filter(s => s.type !== 'warehouse');
+        finalRouteStops.push(...intermediate);
+        totalDist += result.totalDistance;
+        totalDuration += result.totalDurationMinutes;
+        fromOSRM = fromOSRM && matrix.fromOSRM;
+      } else {
+        optimized = false;
+      }
+    }
+
+    if (finalRouteStops.length > 0) {
+      truck.stops = finalRouteStops;
       truck.stats = {
-        distanceKm: Math.round(result.totalDistance * 10) / 10,
-        durationMinutes: Math.round(result.totalDurationMinutes),
-        optimized: true,
-        fromOSRM: matrixResult.fromOSRM
+        distanceKm: Math.round(totalDist * 10) / 10,
+        durationMinutes: Math.round(totalDuration + this.avgUnloadingTime),
+        optimized,
+        fromOSRM
       };
+
+      const limit = Math.min(
+        this.minutesBetween(this.openingTime, this.closingTime),
+        truck.driverMaxMinutes || Infinity
+      );
+      if (truck.stats.durationMinutes > limit) {
+        truck.stats.optimized = false;
+      }
     }
   }
 
@@ -255,25 +525,28 @@ export class MonthlyScheduler {
       if (dow === 0 || this.nonWorkingDays.includes(day.date)) return;
 
       // Filtrar supermercados que corresponden al día según collection_days
-      const daySupersA = zoneA.filter(s => this.matchesDayOfWeek(s.collection_days, dow));
-      const daySupersB = zoneB.filter(s => this.matchesDayOfWeek(s.collection_days, dow));
+      const daySupersA = zoneA
+        .filter(s => this.matchesDayOfWeek(s.collection_days, dow))
+        .sort((a, b) => Number(b.is_foreign || 0) - Number(a.is_foreign || 0));
+      const daySupersB = zoneB
+        .filter(s => this.matchesDayOfWeek(s.collection_days, dow))
+        .sort((a, b) => Number(b.is_foreign || 0) - Number(a.is_foreign || 0));
 
       // Agregar paradas respetando el límite. Si el camión asignado está lleno,
       // intentar el otro; si ambos están llenos, omitir ese super para ese día.
       for (const s of daySupersA) {
-        if (this.hasCapacity(day.truckA)) {
-          day.truckA.stops.push(this.supermarketToStop(s));
-        } else if (this.hasCapacity(day.truckB)) {
-          day.truckB.stops.push(this.supermarketToStop(s));
-        }
-        // Si ambos llenos: el super se omite hoy (ya tiene cupo en la ruta del día siguiente)
+        const stop = this.supermarketToStop(s);
+        this.addStopOrQueue(day, 'truckA', stop, {
+          allowedDays: s.collection_days,
+          reason: 'No cupo en la ruta de recolección del día'
+        });
       }
       for (const s of daySupersB) {
-        if (this.hasCapacity(day.truckB)) {
-          day.truckB.stops.push(this.supermarketToStop(s));
-        } else if (this.hasCapacity(day.truckA)) {
-          day.truckA.stops.push(this.supermarketToStop(s));
-        }
+        const stop = this.supermarketToStop(s);
+        this.addStopOrQueue(day, 'truckB', stop, {
+          allowedDays: s.collection_days,
+          reason: 'No cupo en la ruta de recolección del día'
+        });
       }
 
       // Si un grupo quedó completamente vacío después del clustering, balancear
@@ -295,7 +568,11 @@ export class MonthlyScheduler {
       demand: s.avg_volume ?? 200,
       lat: s.lat,
       lng: s.lng,
-      serviceTimeMinutes: s.loading_time ?? 35
+      serviceTimeMinutes: Number(s.loading_time || 0) > 0
+        ? Number(s.loading_time) + (s.is_foreign === 1 ? 20 : 0)
+        : s.is_foreign === 1
+          ? 55
+          : 35
     };
   }
 
@@ -322,16 +599,19 @@ export class MonthlyScheduler {
             ? other
             : null;
 
-        if (!target) return; // Ambos camiones llenos ese día: instituciones prioritarias para siguiente semana
-
-        target.stops.push({
+        const stop: RouteStop = {
           id: inst.id,
           name: inst.name,
           type: 'institution',
           demand: -(inst.estimated_kg ?? 80),
           lat: inst.lat,
           lng: inst.lng,
-          serviceTimeMinutes: inst.delivery_time ?? 30
+          serviceTimeMinutes: Number(inst.delivery_time || 0) > 0 ? Number(inst.delivery_time) : 30
+        };
+
+        this.addStopOrQueue(day, target === day.truckB ? 'truckB' : 'truckA', stop, {
+          allowedDays: inst.fixed_day,
+          reason: 'No cupo en el día fijo de institución'
         });
       });
     });
@@ -345,16 +625,18 @@ export class MonthlyScheduler {
    * Se respeta preferred_day si está configurado.
    */
   private scheduleColonies(plan: MonthlyPlan): void {
-    const urban = this.colonies.filter(c => c.type === 'Urbana');
-    const rural = this.colonies.filter(c => c.type === 'Rural');
+    const urban = this.colonies
+      .filter(c => c.type === 'Urbana')
+      .sort((a, b) => Number(b.recovery_fee || 0) - Number(a.recovery_fee || 0));
+    const rural = this.colonies
+      .filter(c => c.type === 'Rural')
+      .sort((a, b) => Number(b.recovery_fee || 0) - Number(a.recovery_fee || 0));
 
     // Colonias urbanas: agrupar por zona y distribuir en semanas 1 y 3
     const [zoneA, zoneB] = this.clusterByZone(urban);
 
-    this.assignColonyVisits(plan, zoneA, 'truckA', 1); // Semana 1
-    this.assignColonyVisits(plan, zoneA, 'truckA', 3); // Semana 3
-    this.assignColonyVisits(plan, zoneB, 'truckB', 1);
-    this.assignColonyVisits(plan, zoneB, 'truckB', 3);
+    this.assignColonyVisits(plan, zoneA, 'truckA');
+    this.assignColonyVisits(plan, zoneB, 'truckB');
 
     // Colonias rurales: primer sábado del mes
     const firstSaturday = plan.days.find(d => {
@@ -364,13 +646,12 @@ export class MonthlyScheduler {
 
     if (firstSaturday) {
       const target = this.lighterTruck(firstSaturday);
-      const other = target === firstSaturday.truckA ? firstSaturday.truckB : firstSaturday.truckA;
       rural.forEach(colony => {
-        if (this.hasCapacity(target)) {
-          target.stops.push(this.colonyToStop(colony));
-        } else if (this.hasCapacity(other)) {
-          other.stops.push(this.colonyToStop(colony));
-        }
+        const stop = this.colonyToStop(colony);
+        this.addStopOrQueue(firstSaturday, target === firstSaturday.truckB ? 'truckB' : 'truckA', stop, {
+          allowedDays: 'Sabado',
+          reason: 'No cupo en la visita rural programada'
+        });
       });
     }
   }
@@ -382,10 +663,11 @@ export class MonthlyScheduler {
   private assignColonyVisits(
     plan: MonthlyPlan,
     colonies: any[],
-    truck: 'truckA' | 'truckB',
-    weekNumber: 1 | 2 | 3 | 4
+    truck: 'truckA' | 'truckB'
   ): void {
     colonies.forEach((colony, idx) => {
+      const weeks = this.weeksForFrequency(colony.frequency, colony.type);
+      weeks.forEach((weekNumber) => {
       // Calcular el día objetivo en el mes
       const baseOffset = (weekNumber - 1) * 7; // inicio de la semana
       const preferredDow = colony.preferred_day ? this.dayNameToIndex(colony.preferred_day) : 1;
@@ -428,15 +710,13 @@ export class MonthlyScheduler {
       if (targetDay) {
         // Respetar el límite de paradas por camión
         const primaryTruck = targetDay[truck];
-        const otherTruck = truck === 'truckA' ? targetDay.truckB : targetDay.truckA;
-        if (this.hasCapacity(primaryTruck)) {
-          primaryTruck.stops.push(this.colonyToStop(colony));
-        } else if (this.hasCapacity(otherTruck)) {
-          // Si el camión asignado está lleno, intentar el otro
-          otherTruck.stops.push(this.colonyToStop(colony));
-        }
-        // Si ambos llenos: colonia se omite esa semana (pendiente para próxima)
+        const stop = this.colonyToStop(colony);
+        this.addStopOrQueue(targetDay, primaryTruck === targetDay.truckB ? 'truckB' : 'truckA', stop, {
+          allowedDays: colony.preferred_day || undefined,
+          reason: 'No cupo en la semana/día preferido de colonia'
+        });
       }
+      });
     });
   }
 
@@ -449,7 +729,7 @@ export class MonthlyScheduler {
       demand: -((c.pantry_count ?? 20) * pantryWeight),
       lat: c.lat,
       lng: c.lng,
-      serviceTimeMinutes: 20
+      serviceTimeMinutes: Number(c.service_time || 0) > 0 ? Number(c.service_time) : 20
     };
   }
 
@@ -554,9 +834,12 @@ export class MonthlyScheduler {
       if (!visitedThisWeek.has(wk)) visitedThisWeek.set(wk, new Set());
       const visitedSet = visitedThisWeek.get(wk)!;
 
-      for (const beneficiary of this.caridad) {
+      const beneficiaries = [...this.caridad].sort((a, b) => this.beneficiaryPriority(b) - this.beneficiaryPriority(a));
+
+      for (const beneficiary of beneficiaries) {
         // Ya visitado esta semana → saltar
         if (visitedSet.has(beneficiary.id)) continue;
+        if (this.isRestrictedForDay(beneficiary.restriction_day, dow)) continue;
 
         const bLat = beneficiary.lat ?? this.cedisLat;
         const bLng = beneficiary.lng ?? this.cedisLng;
@@ -570,8 +853,8 @@ export class MonthlyScheduler {
           if (!this.hasCapacity(truck)) continue; // Evitar exceder el límite de paradas diarias
           const dist = minDistToRoute(bLat, bLng, truck.stops);
           const usedKg = currentLoad(truck.stops);
-          const remainingKg = TRUCK_CAPACITY_KG - usedKg;
-          if (dist <= PROXIMITY_KM && remainingKg >= DESPENSA_KG) {
+          const remainingKg = this.getTruckCapacity(truck) - usedKg;
+          if (dist <= PROXIMITY_KM && remainingKg >= DESPENSA_KG && this.canReceiveStop(truck, this.beneficiaryToStop(beneficiary))) {
             trucks.push({ truck, distKm: dist, remainingKg });
           }
         }
@@ -593,10 +876,10 @@ export class MonthlyScheduler {
       id: b.id,
       name: b.name,
       type: 'beneficiary',
-      demand: -15,
+      demand: -this.beneficiaryDemandKg(b),
       lat: b.lat ?? this.cedisLat,
       lng: b.lng ?? this.cedisLng,
-      serviceTimeMinutes: 10
+      serviceTimeMinutes: Number(b.avg_delivery_time || 0) > 0 ? Number(b.avg_delivery_time) : 10
     };
   }
 
@@ -620,12 +903,13 @@ export class MonthlyScheduler {
       return;
     }
 
-    if (availableUnitsCount === 1) {
-      // Usar la única unidad/chofer activo para truckA, vaciar truckB
-      const activeTruck = activeTrucks[0];
-      const activeDriver = activeDrivers[0];
+    plan.days.forEach(day => {
+      const dow = new Date(day.date + 'T12:00:00').getDay();
+      const availableDrivers = activeDrivers.filter(driver => this.matchesDayOfWeek(driver.available_days, dow));
+      const usableDrivers = availableDrivers.length > 0 ? availableDrivers : activeDrivers;
+      const sortedTrucks = [...activeTrucks].sort((a, b) => (b.capacity_kg ?? 0) - (a.capacity_kg ?? 0));
 
-      plan.days.forEach(day => {
+      if (availableUnitsCount === 1 || usableDrivers.length === 1) {
         // Mover todas las paradas a truckA y truncar
         day.truckA.stops = [...day.truckA.stops, ...day.truckB.stops];
         day.truckB.stops = [];
@@ -634,27 +918,32 @@ export class MonthlyScheduler {
           day.truckA.stops = day.truckA.stops.slice(0, this.maxStopsPerTruck);
         }
 
+        const activeTruck = sortedTrucks[0];
+        const activeDriver = usableDrivers[0];
         day.truckA.truckId = activeTruck.id;
+        day.truckA.truckCapacityKg = Number(activeTruck.capacity_kg || DEFAULT_TRUCK_CAPACITY_KG);
         day.truckA.driverId = activeDriver.id;
+        day.truckA.driverMaxMinutes = Number(activeDriver.max_hours_per_day || 8) * 60;
         day.truckB.truckId = null;
         day.truckB.driverId = null;
-      });
-      return;
-    }
+        day.truckB.truckCapacityKg = 0;
+        day.truckB.driverMaxMinutes = 0;
+        return;
+      }
 
-    // Modelo estándar: 2 o más camiones y choferes activos
-    const sortedTrucks = [...activeTrucks].sort((a, b) => (b.capacity_kg ?? 0) - (a.capacity_kg ?? 0));
-    const truckA = sortedTrucks[0];
-    const truckB = sortedTrucks[1] ?? sortedTrucks[0];
+      const truckA = sortedTrucks[0];
+      const truckB = sortedTrucks[1] ?? sortedTrucks[0];
 
-    const driverA = activeDrivers.find(d => d.name?.toLowerCase().includes('juan')) ?? activeDrivers[0];
-    const driverB = activeDrivers.find(d => d.id !== driverA?.id) ?? activeDrivers[0];
-
-    plan.days.forEach(day => {
+      const driverA = usableDrivers[0];
+      const driverB = usableDrivers.find(d => d.id !== driverA?.id) ?? usableDrivers[0];
       day.truckA.truckId = truckA.id;
+      day.truckA.truckCapacityKg = Number(truckA.capacity_kg || DEFAULT_TRUCK_CAPACITY_KG);
       day.truckA.driverId = driverA?.id;
+      day.truckA.driverMaxMinutes = Number(driverA?.max_hours_per_day || 8) * 60;
       day.truckB.truckId = truckB.id;
+      day.truckB.truckCapacityKg = Number(truckB.capacity_kg || DEFAULT_TRUCK_CAPACITY_KG);
       day.truckB.driverId = driverB?.id;
+      day.truckB.driverMaxMinutes = Number(driverB?.max_hours_per_day || 8) * 60;
     });
   }
 
@@ -705,11 +994,112 @@ export class MonthlyScheduler {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  /** Retorna el camión con menor carga acumulada en el día. */
+  /** Retorna el camión con menor carga acumulada en el día (prioriza menor cantidad de paradas). */
   private lighterTruck(day: DailyRoster): TruckRoute {
+    const stopsA = day.truckA.stops.length;
+    const stopsB = day.truckB.stops.length;
+    if (stopsA !== stopsB) {
+      return stopsA < stopsB ? day.truckA : day.truckB;
+    }
     const loadA = day.truckA.stops.reduce((acc, s) => acc + Math.abs(s.demand), 0);
     const loadB = day.truckB.stops.reduce((acc, s) => acc + Math.abs(s.demand), 0);
     return loadA <= loadB ? day.truckA : day.truckB;
+  }
+
+  /** Balancea la cantidad de paradas de forma equitativa entre ambos camiones de cada día. */
+  private balanceDailyWorkloads(plan: MonthlyPlan): void {
+    for (const day of plan.days) {
+      let stopsA = day.truckA.stops;
+      let stopsB = day.truckB.stops;
+
+      while (Math.abs(stopsA.length - stopsB.length) > 1) {
+        const busier = stopsA.length > stopsB.length ? day.truckA : day.truckB;
+        const lighter = busier === day.truckA ? day.truckB : day.truckA;
+
+        let moved = false;
+        for (let i = busier.stops.length - 1; i >= 0; i--) {
+          const stop = busier.stops[i];
+          if (stop.type === 'warehouse') continue;
+
+          if (this.canReceiveStop(lighter, stop)) {
+            busier.stops.splice(i, 1);
+            lighter.stops.push(stop);
+            moved = true;
+            break;
+          }
+        }
+
+        if (!moved) break;
+
+        stopsA = day.truckA.stops;
+        stopsB = day.truckB.stops;
+      }
+    }
+  }
+
+  private dayHasStop(day: DailyRoster, stop: RouteStop): boolean {
+    return [...day.truckA.stops, ...day.truckB.stops].some(existing => {
+      return existing.id === stop.id && existing.type === stop.type;
+    });
+  }
+
+  private weeksForFrequency(frequency: string | null | undefined, type?: string): Array<1 | 2 | 3 | 4> {
+    const normalized = this.normalizeText(frequency || '');
+
+    if (normalized.includes('semanal') && !normalized.includes('quincenal')) return [1, 2, 3, 4];
+    if (normalized.includes('quincenal') || normalized.includes('15')) return [1, 3];
+    if (normalized.includes('mensual') || normalized.includes('mes')) return [1];
+    if (normalized.includes('bimestral')) return [1];
+
+    return type === 'Rural' ? [1] : [1, 3];
+  }
+
+  private isRestrictedForDay(dayString: string | null | undefined, targetDow: number): boolean {
+    if (!dayString) return false;
+    const normalized = this.normalizeText(dayString);
+    if (!normalized || normalized === 'ninguna' || normalized === 'sinrestriccion') return false;
+    return this.matchesDayOfWeek(dayString, targetDow);
+  }
+
+  private beneficiaryPriority(beneficiary: any): number {
+    const normalized = this.normalizeText(beneficiary.pb || '');
+    if (!normalized) return 0;
+    if (normalized.includes('alta') || normalized === '1' || normalized.includes('prioridad1')) return 3;
+    if (normalized.includes('media') || normalized === '2' || normalized.includes('prioridad2')) return 2;
+    if (normalized.includes('baja') || normalized === '3' || normalized.includes('prioridad3')) return 1;
+    return 1;
+  }
+
+  private beneficiaryDemandKg(beneficiary: any): number {
+    const normalized = this.normalizeText(beneficiary.pb || '');
+    if (normalized.includes('doble')) return 30;
+    return 15;
+  }
+
+  private minutesBetween(start: string, end: string): number {
+    const startMinutes = this.timeToMinutes(start || DEFAULT_START_TIME);
+    let endMinutes = this.timeToMinutes(end || DEFAULT_END_TIME);
+    if (endMinutes <= startMinutes) endMinutes += 24 * 60;
+    return endMinutes - startMinutes;
+  }
+
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return (Number.isFinite(hours) ? hours : 7) * 60 + (Number.isFinite(minutes) ? minutes : 0);
+  }
+
+  private minutesToTime(minutes: number): string {
+    const h = Math.floor(minutes / 60) % 24;
+    const m = Math.round(minutes % 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  private normalizeText(value: string): string {
+    return value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, '');
   }
 
   /**
@@ -721,11 +1111,7 @@ export class MonthlyScheduler {
     const DAYS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
     const target = DAYS[targetDow];
 
-    const normalized = dayString
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, '');
+    const normalized = this.normalizeText(dayString);
 
     const parts = normalized.split(',');
     for (const part of parts) {
@@ -754,11 +1140,7 @@ export class MonthlyScheduler {
   private dayNameToIndex(dayName: string | null | undefined): number {
     if (!dayName) return -1;
     const DAYS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
-    const normalized = dayName
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, '');
+    const normalized = this.normalizeText(dayName);
     return DAYS.findIndex(d => normalized.includes(d));
   }
 }

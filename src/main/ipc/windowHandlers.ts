@@ -1,6 +1,10 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, app } from 'electron'
 
 export function registerWindowHandlers() {
+  ipcMain.handle('window:get-version', () => {
+    return app.getVersion()
+  })
+
   ipcMain.handle('window:minimize', () => {
     BrowserWindow.getFocusedWindow()?.minimize()
   })

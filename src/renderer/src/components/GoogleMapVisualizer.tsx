@@ -19,6 +19,8 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
 
   const [polylineA, setPolylineA] = useState<[number, number][]>([])
   const [polylineB, setPolylineB] = useState<[number, number][]>([])
+  const [showUnitA, setShowUnitA] = useState(true)
+  const [showUnitB, setShowUnitB] = useState(true)
   const [isLoadingRoute, setIsLoadingRoute] = useState(false)
   const [selectedStopIndex, setSelectedStopIndex] = useState<number | null>(null)
   const [isSimulating, setIsSimulating] = useState(false)
@@ -260,7 +262,7 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
     polylinesRef.current = []
 
     // A. Dibujar Polilínea A (Unidad A - Sólida Naranja)
-    if (polylineA.length > 0) {
+    if (showUnitA && polylineA.length > 0) {
       const pathA = polylineA.map(p => ({ lat: p[0], lng: p[1] }))
       const polyA = new google.maps.Polyline({
         path: pathA,
@@ -274,7 +276,7 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
     }
 
     // B. Dibujar Polilínea B (Unidad B - Punteada Azul)
-    if (polylineB.length > 0) {
+    if (showUnitB && polylineB.length > 0) {
       const pathB = polylineB.map(p => ({ lat: p[0], lng: p[1] }))
       
       const lineSymbol = {
@@ -326,6 +328,9 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
     stopsWithLoad.forEach((stop, index) => {
       if (!stop.lat || !stop.lng) return
 
+      const isVisible = stop.truck === 'A' ? showUnitA : stop.truck === 'B' ? showUnitB : true
+      if (!isVisible) return
+
       const color = getMarkerColor(stop.type, stop.truck)
       const marker = new google.maps.Marker({
         position: { lat: parseFloat(stop.lat.toString()), lng: parseFloat(stop.lng.toString()) },
@@ -363,7 +368,7 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
       markersRef.current.push(marker)
     })
 
-  }, [mapLoaded, polylineA, polylineB, route, cedisCoords])
+  }, [mapLoaded, polylineA, polylineB, route, cedisCoords, showUnitA, showUnitB])
 
   // 7. Recentrar mapa en el punto seleccionado
   useEffect(() => {
@@ -532,16 +537,24 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
         {/* LEYENDA FLOTANTE */}
         <div className="absolute bottom-10 left-10 bg-slate-900/90 backdrop-blur-2xl p-6 rounded-[2.5rem] border border-white/10 text-white shadow-2xl z-[1000] hidden sm:block">
             <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Monitor Logístico (Google)</h6>
-            <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-1 bg-orange-500 rounded-full" />
-                    <span className="text-[10px] font-black uppercase tracking-tight text-slate-300">Ruta Unidad A</span>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-1.5 bg-blue-500 rounded-full" style={{ borderStyle: 'dashed' }} />
-                    <span className="text-[10px] font-black uppercase tracking-tight text-slate-300">Ruta Unidad B</span>
-                </div>
-                <div className="flex items-center gap-3">
+            <div className="space-y-4">
+                <button
+                  onClick={() => setShowUnitA(!showUnitA)}
+                  className={`flex items-center gap-3 w-full text-left p-1.5 rounded-xl hover:bg-white/10 transition-all ${!showUnitA ? 'opacity-40' : ''}`}
+                >
+                    <div className="w-10 h-3 bg-orange-500 rounded-full" />
+                    <span className="text-[10px] font-black uppercase tracking-tight text-slate-300 flex-1">Unidad A</span>
+                    <input type="checkbox" checked={showUnitA} readOnly className="h-3 w-3 accent-orange-600 rounded cursor-pointer" />
+                </button>
+                <button
+                  onClick={() => setShowUnitB(!showUnitB)}
+                  className={`flex items-center gap-3 w-full text-left p-1.5 rounded-xl hover:bg-white/10 transition-all ${!showUnitB ? 'opacity-40' : ''}`}
+                >
+                    <div className="w-10 h-3 bg-blue-500 rounded-full" />
+                    <span className="text-[10px] font-black uppercase tracking-tight text-slate-300 flex-1">Unidad B</span>
+                    <input type="checkbox" checked={showUnitB} readOnly className="h-3 w-3 accent-blue-600 rounded cursor-pointer" />
+                </button>
+                <div className="flex items-center gap-3 p-1.5">
                     <div className="w-4 h-4 rounded-lg bg-red-500 shadow-lg shadow-red-500/30" />
                     <span className="text-[10px] font-black uppercase tracking-tight text-slate-300">CEDIS BAMX</span>
                 </div>

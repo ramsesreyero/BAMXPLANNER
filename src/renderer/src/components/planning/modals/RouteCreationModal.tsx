@@ -34,9 +34,9 @@ export const RouteCreationModal: React.FC<RouteCreationModalProps> = ({
                         <Truck size={28} className="text-white" />
                     </div>
                     <h3 className="text-3xl font-black text-slate-900 tracking-tighter">
-                        Nuevo <span className="text-orange-600">Despliegue</span>
+                        Nueva <span className="text-orange-600">ruta</span>
                     </h3>
-                    <p className="text-slate-400 text-sm font-medium mt-1">Configura una nueva unidad operativa.</p>
+                    <p className="text-slate-400 text-sm font-medium mt-1">Elige unidad, chofer y tipo de ruta.</p>
                     <button
                         onClick={onClose}
                         className="absolute top-10 right-10 text-slate-300 hover:text-slate-900 transition-colors w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl"
@@ -47,7 +47,7 @@ export const RouteCreationModal: React.FC<RouteCreationModalProps> = ({
                 <form onSubmit={onSubmit} className="p-10 space-y-6">
                     <div className="space-y-3">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                            Unidad Logística
+                            Unidad
                         </label>
                         <div className="relative group">
                             <select
@@ -67,7 +67,7 @@ export const RouteCreationModal: React.FC<RouteCreationModalProps> = ({
                     </div>
                     <div className="space-y-3">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                            Chofer Responsable
+                            Chofer
                         </label>
                         <div className="relative group">
                             <select
@@ -87,7 +87,7 @@ export const RouteCreationModal: React.FC<RouteCreationModalProps> = ({
                     </div>
                     <div className="space-y-3">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                            Tipo Operativo
+                            Tipo de ruta
                         </label>
                         <div className="grid grid-cols-2 gap-2">
                             {['Entrega', 'Recolección', 'Institucional', 'Caridad'].map((type) => (

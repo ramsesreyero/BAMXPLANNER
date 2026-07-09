@@ -31,6 +31,7 @@ const api = {
     set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)
   },
   googleMaps: {
+    geocode: (address: string) => ipcRenderer.invoke('google-maps:geocode', address),
     getDistanceMatrix: (points: { lat: number; lng: number }[]) => 
       ipcRenderer.invoke('google-maps:distance-matrix', points),
     getDirections: (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, waypoints?: { lat: number; lng: number }[]) => 
@@ -40,7 +41,8 @@ const api = {
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),
-    close: () => ipcRenderer.invoke('window:close')
+    close: () => ipcRenderer.invoke('window:close'),
+    getVersion: () => ipcRenderer.invoke('window:get-version')
   }
 }
 

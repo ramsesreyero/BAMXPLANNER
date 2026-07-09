@@ -4,10 +4,11 @@ import {
     ChevronRight, Plus, Truck, Users, MapPin, 
     Clock, CheckCircle2, Trash2, ArrowRight, Search, Filter, 
     Building2, Edit3, X, ShoppingCart, 
-    Package
+    Package, Copy, AlertTriangle
 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { MonthlyScheduler, MonthlyPlan } from '../utils/monthlyScheduler'
+import { MonthlyScheduler, MonthlyPlan, DailyRoster } from '../utils/monthlyScheduler'
+import { RouteStop } from '../utils/geneticRouting'
 import ConfirmModal from './ConfirmModal'
 import { PlanningHeader } from './planning/PlanningHeader'
 import { PlanningStats } from './planning/PlanningStats'
@@ -15,6 +16,40 @@ import { MonthlyPlanModal } from './planning/MonthlyPlanModal'
 import { CalendarGrid } from './planning/CalendarGrid'
 import { exportRouteToPDF } from '../utils/jsPDFRouteExport'
 import { FileText } from 'lucide-react'
+import { getDistanceMatrix } from '../utils/distanceMatrix'
+
+function timeToMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    return (Number.isFinite(h) ? h : 7) * 60 + (Number.isFinite(m) ? m : 0);
+}
+
+function minutesToTime(minutes: number): string {
+    const h = Math.floor(minutes / 60) % 24;
+    const m = Math.round(minutes % 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function minutesBetween(start: string, end: string): number {
+    const startMin = timeToMinutes(start);
+    let endMin = timeToMinutes(end);
+    if (endMin <= startMin) endMin += 24 * 60;
+    return endMin - startMin;
+}
+
+type PlanningReadiness = {
+    totalStops: number
+    missingLocations: number
+    activeTrucks: number
+    activeDrivers: number
+}
+
+const hasCoordinates = (item: any) =>
+    item.lat !== null &&
+    item.lat !== undefined &&
+    item.lat !== '' &&
+    item.lng !== null &&
+    item.lng !== undefined &&
+    item.lng !== ''
 
 const PlanningView = () => {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
@@ -26,6 +61,53 @@ const PlanningView = () => {
     const [searchTerm] = useState('')
     const [viewMode, setViewMode] = useState<'calendar' | 'day'>('calendar')
     const [monthSummary, setMonthSummary] = useState<any[]>([])
+
+    const [draggedDayStop, setDraggedDayStop] = useState<{
+        routeId: number
+        stopIndex: number
+    } | null>(null)
+
+    const [dragOverDayStop, setDragOverDayStop] = useState<{
+        routeId: number
+        stopIndex: number | 'container'
+    } | null>(null)
+
+    const handleDayStopDrop = async (targetRouteId: number, targetIdx: number) => {
+        if (!draggedDayStop) return
+        const { routeId: sourceRouteId, stopIndex: sourceIdx } = draggedDayStop
+
+        if (sourceRouteId === targetRouteId && sourceIdx === targetIdx) return
+
+        const sourceRoute = routes.find(r => r.id === sourceRouteId)
+        const targetRoute = routes.find(r => r.id === targetRouteId)
+        if (!sourceRoute || !targetRoute) return
+
+        const sourceStops = [...sourceRoute.stops]
+        const targetStops = sourceRouteId === targetRouteId ? sourceStops : [...targetRoute.stops]
+
+        const [movedStop] = sourceStops.splice(sourceIdx, 1)
+        targetStops.splice(targetIdx, 0, movedStop)
+
+        try {
+            if (sourceRouteId !== targetRouteId) {
+                for (let i = 0; i < sourceStops.length; i++) {
+                    await window.api.db.update('route_stops', sourceStops[i].id, {
+                        sequence_order: i + 1
+                    })
+                }
+            }
+            for (let i = 0; i < targetStops.length; i++) {
+                await window.api.db.update('route_stops', targetStops[i].id, {
+                    route_id: targetRouteId,
+                    sequence_order: i + 1
+                })
+            }
+            await loadData()
+        } catch (error) {
+            console.error("Error updating stops order in database:", error)
+            alert("Error al actualizar el orden de las paradas.")
+        }
+    }
 
 
 
@@ -68,6 +150,46 @@ const PlanningView = () => {
         institutions: true
     })
     const [showFilters, setShowFilters] = useState(false)
+    const [planningReadiness, setPlanningReadiness] = useState<PlanningReadiness | null>(null)
+    
+    const [warehouseConfig, setWarehouseConfig] = useState({
+        cedisLat: 27.477850806886945,
+        cedisLng: -99.49498391012905,
+        openingTime: '07:00',
+        closingTime: '18:00',
+        avgUnloadingTime: 20
+    });
+
+    useEffect(() => {
+        const loadWH = async () => {
+            try {
+                const [cedisCoordsSetting, warehouseRows] = await Promise.all([
+                    window.api.settings.get('cedis_coords'),
+                    window.api.db.list('warehouse')
+                ]);
+                let cedisLat = 27.477850806886945;
+                let cedisLng = -99.49498391012905;
+                if (cedisCoordsSetting?.value) {
+                    const parts = cedisCoordsSetting.value.split(',').map((p: string) => parseFloat(p.trim()));
+                    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        cedisLat = parts[0];
+                        cedisLng = parts[1];
+                    }
+                }
+                const warehouse = Array.isArray(warehouseRows) && warehouseRows.length > 0 ? warehouseRows[0] : null;
+                setWarehouseConfig({
+                    cedisLat,
+                    cedisLng,
+                    openingTime: warehouse?.opening_time || '07:00',
+                    closingTime: warehouse?.closing_time || '18:00',
+                    avgUnloadingTime: Number(warehouse?.avg_unloading_time || 20)
+                });
+            } catch (e) {
+                console.error("Error loading warehouse config:", e);
+            }
+        };
+        loadWH();
+    }, []);
     
     // Seleccion de mes/ano para la planeacion
     const location = useLocation()
@@ -141,11 +263,41 @@ const PlanningView = () => {
         }
     }
 
+    const loadPlanningReadiness = async () => {
+        try {
+            const [colonies, supermarkets, institutions, caridad, trk, drv] = await Promise.all([
+                window.api.db.list('colonies'),
+                window.api.db.list('supermarkets'),
+                window.api.db.list('institutions'),
+                window.api.db.list('beneficiaries'),
+                window.api.db.list('trucks'),
+                window.api.db.list('drivers')
+            ])
+
+            const selectedStops = [
+                ...(selectedFilters.colonies ? colonies : []),
+                ...(selectedFilters.supermarkets ? supermarkets : []),
+                ...(selectedFilters.institutions ? institutions : []),
+                ...(selectedFilters.beneficiaries ? caridad : [])
+            ]
+
+            setPlanningReadiness({
+                totalStops: selectedStops.length,
+                missingLocations: selectedStops.filter((item) => !hasCoordinates(item)).length,
+                activeTrucks: trk.filter((truck: any) => truck.is_available !== 0).length,
+                activeDrivers: drv.filter((driver: any) => driver.is_available !== 0).length
+            })
+        } catch (error) {
+            console.error('Error loading planning readiness:', error)
+        }
+    }
+
     useEffect(() => {
         if (viewMode === 'day') {
             loadData()
         } else {
             loadMonthSummary()
+            loadPlanningReadiness()
             const loadLogistics = async () => {
                 try {
                     const [trk, drv] = await Promise.all([
@@ -160,7 +312,16 @@ const PlanningView = () => {
             }
             loadLogistics()
         }
-    }, [selectedDate, viewMode, planMonth, planYear])
+    }, [
+        selectedDate,
+        viewMode,
+        planMonth,
+        planYear,
+        selectedFilters.supermarkets,
+        selectedFilters.colonies,
+        selectedFilters.beneficiaries,
+        selectedFilters.institutions
+    ])
 
     const loadMonthPlan = async () => {
         setLoading(true);
@@ -319,13 +480,47 @@ const PlanningView = () => {
         month: 'long'
     }).format(new Date(selectedDate + 'T12:00:00'))
 
+    const createRouteShareText = (route: any) => {
+        const date = new Date(route.date + 'T12:00:00').toLocaleDateString('es-MX', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long'
+        })
+        const stops = route.stops || []
+        const stopLines = stops.map((stop: any, idx: number) => {
+            const name = stop.stop_name || stop.name || `Punto ${stop.stop_id}`
+            const maps = stop.lat && stop.lng ? ` - https://www.google.com/maps?q=${stop.lat},${stop.lng}` : ''
+            return `${idx + 1}. ${name}${maps}`
+        })
+
+        return [
+            `Ruta BAMX - ${date}`,
+            `Chofer: ${route.driver_name || 'Sin asignar'}`,
+            `Unidad: ${route.truck_name || 'Sin asignar'}`,
+            '',
+            'Salida: CEDIS BAMX',
+            ...stopLines,
+            'Regreso: CEDIS BAMX'
+        ].join('\n')
+    }
+
+    const copyRouteForWhatsApp = async (route: any) => {
+        try {
+            await navigator.clipboard.writeText(createRouteShareText(route))
+            alert('Resumen copiado. Ya puedes pegarlo en WhatsApp.')
+        } catch (error) {
+            console.error('Error copying route summary:', error)
+            alert('No se pudo copiar el resumen de la ruta.')
+        }
+    }
+
 
 
     const handleGenerateMonthlyPlan = async () => {
         setIsGeneratingMonthly(true);
         setIsMonthlyModalOpen(true);
         try {
-            const [colonies, supermarkets, institutions, caridad, trucks, drivers, algoConfig, holidays, cedisCoordsSetting] = await Promise.all([
+            const [colonies, supermarkets, institutions, caridad, trucks, drivers, algoConfig, holidays, cedisCoordsSetting, warehouseRows] = await Promise.all([
                 window.api.db.list('colonies'),
                 window.api.db.list('supermarkets'),
                 window.api.db.list('institutions'),
@@ -334,13 +529,46 @@ const PlanningView = () => {
                 window.api.db.list('drivers'),
                 window.api.settings.get('algorithm_config'),
                 window.api.settings.get('non_working_days'),
-                window.api.settings.get('cedis_coords')
+                window.api.settings.get('cedis_coords'),
+                window.api.db.list('warehouse')
             ]);
 
             const gaConfig = algoConfig ? JSON.parse(algoConfig.value) : undefined;
             const nonWorkingDays = holidays ? JSON.parse(holidays.value).map((h: any) => h.date) : [];
-            // maxRoutesPerDay viene de la configuración de Ajustes > Algoritmo
+            // maxRoutesPerDay viene de Ajustes > Operación.
             const maxStopsPerTruck: number = gaConfig?.maxRoutesPerDay ?? 10;
+
+            const activeTrucks = trucks.filter((truck: any) => truck.is_available !== 0);
+            const activeDrivers = drivers.filter((driver: any) => driver.is_available !== 0);
+            const selectedStops = [
+                ...(selectedFilters.colonies ? colonies : []),
+                ...(selectedFilters.supermarkets ? supermarkets : []),
+                ...(selectedFilters.institutions ? institutions : []),
+                ...(selectedFilters.beneficiaries ? caridad : [])
+            ];
+            const missingLocations = selectedStops.filter((item) => !hasCoordinates(item));
+
+            setPlanningReadiness({
+                totalStops: selectedStops.length,
+                missingLocations: missingLocations.length,
+                activeTrucks: activeTrucks.length,
+                activeDrivers: activeDrivers.length
+            });
+
+            if (selectedStops.length === 0) {
+                alert('No hay puntos seleccionados para planear. Activa al menos un tipo de punto o registra datos de operación.');
+                return;
+            }
+
+            if (activeTrucks.length === 0 || activeDrivers.length === 0) {
+                alert('Para generar la planeación necesitas al menos una unidad disponible y un chofer disponible.');
+                return;
+            }
+
+            if (missingLocations.length > 0) {
+                alert(`Hay ${missingLocations.length} puntos sin ubicación. Corrige esas ubicaciones antes de generar la planeación para evitar rutas incorrectas.`);
+                return;
+            }
 
             // Leer coordenadas del CEDIS desde ajustes (C. Iturbide 1407, San José, 88230 Nuevo Laredo)
             let cedisLat = 27.477850806886945;
@@ -353,19 +581,24 @@ const PlanningView = () => {
                 }
             }
 
+            const warehouse = Array.isArray(warehouseRows) && warehouseRows.length > 0 ? warehouseRows[0] : null;
+
             const scheduler = new MonthlyScheduler({
                 startDate: `${planYear}-${planMonth + 1}-01`,
                 colonies: selectedFilters.colonies ? colonies : [],
                 supermarkets: selectedFilters.supermarkets ? supermarkets : [],
                 institutions: selectedFilters.institutions ? institutions : [],
                 caridad: selectedFilters.beneficiaries ? caridad : [],
-                trucks,
-                drivers,
+                trucks: activeTrucks,
+                drivers: activeDrivers,
                 gaConfig,
                 nonWorkingDays,
                 cedisLat,
                 cedisLng,
-                maxStopsPerTruck
+                maxStopsPerTruck,
+                openingTime: warehouse?.opening_time || '07:00',
+                closingTime: warehouse?.closing_time || '18:00',
+                avgUnloadingTime: Number(warehouse?.avg_unloading_time || 20)
             });
 
             const plan = await scheduler.generate();
@@ -411,31 +644,142 @@ const PlanningView = () => {
 
 
 
-    const removeStopFromDay = (dayIdx: number, truck: 'truckA' | 'truckB', stopIdx: number) => {
+    const recalculateDayStatsAndTimings = async (day: DailyRoster, truckKey: 'truckA' | 'truckB') => {
+        const truck = day[truckKey];
+        if (truck.stops.length === 0) {
+            truck.stats = {
+                distanceKm: 0,
+                durationMinutes: 0,
+                optimized: true,
+                fromOSRM: true
+            };
+            return;
+        }
+
+        const warehouseStop: RouteStop = {
+            id: 1,
+            name: 'CEDIS BAMX (C. Iturbide 1407, San José, 88230 Nuevo Laredo)',
+            type: 'warehouse',
+            demand: 0,
+            lat: warehouseConfig.cedisLat,
+            lng: warehouseConfig.cedisLng,
+            serviceTimeMinutes: warehouseConfig.avgUnloadingTime
+        };
+
+        const allStops = [warehouseStop, ...truck.stops, warehouseStop];
+        const geoPoints = allStops.map(s => ({
+            lat: s.lat ?? warehouseConfig.cedisLat,
+            lng: s.lng ?? warehouseConfig.cedisLng,
+            id: s.id,
+            name: s.name
+        }));
+
+        const matrix = await getDistanceMatrix(geoPoints);
+
+        let totalDist = 0;
+        let totalTransit = 0;
+        for (let i = 1; i < allStops.length; i++) {
+            totalDist += matrix.distances[i - 1][i];
+            totalTransit += matrix.durations[i - 1][i];
+        }
+
+        let totalService = 0;
+        for (const stop of truck.stops) {
+            const service = stop.serviceTimeMinutes ?? (
+                stop.type === 'supermarket' ? 35 :
+                stop.type === 'institution' ? 30 :
+                stop.type === 'colony' ? 20 :
+                stop.type === 'beneficiary' ? 10 : 15
+            );
+            totalService += service;
+        }
+
+        let currentMin = timeToMinutes(warehouseConfig.openingTime || '07:00');
+        for (let i = 0; i < truck.stops.length; i++) {
+            const stop = truck.stops[i];
+            const transit = matrix.durations[i][i + 1];
+            currentMin += transit;
+            stop.estimatedArrival = minutesToTime(currentMin);
+            const service = stop.serviceTimeMinutes ?? (
+                stop.type === 'supermarket' ? 35 :
+                stop.type === 'institution' ? 30 :
+                stop.type === 'colony' ? 20 :
+                stop.type === 'beneficiary' ? 10 : 15
+            );
+            currentMin += service;
+            stop.estimatedDeparture = minutesToTime(currentMin);
+        }
+
+        const totalDuration = totalTransit + totalService + warehouseConfig.avgUnloadingTime;
+
+        truck.stats = {
+            distanceKm: Math.round(totalDist * 10) / 10,
+            durationMinutes: Math.round(totalDuration),
+            optimized: true,
+            fromOSRM: matrix.fromOSRM
+        };
+
+        const limit = Math.min(
+            minutesBetween(warehouseConfig.openingTime || '07:00', warehouseConfig.closingTime || '18:00'),
+            truck.driverMaxMinutes || Infinity
+        );
+        if (truck.stats.durationMinutes > limit) {
+            truck.stats.optimized = false;
+        }
+    };
+
+    const removeStopFromDay = async (dayIdx: number, truck: 'truckA' | 'truckB', stopIdx: number) => {
         if (!monthlyPlan) return;
         const newPlan = { ...monthlyPlan };
-        newPlan.days[dayIdx][truck].stops.splice(stopIdx, 1);
+        const day = newPlan.days[dayIdx];
+        day[truck].stops.splice(stopIdx, 1);
+        await recalculateDayStatsAndTimings(day, truck);
         setMonthlyPlan({ ...newPlan });
     };
 
-    const moveStopBetweenTrucks = (dayIdx: number, fromTruck: 'truckA' | 'truckB', stopIdx: number) => {
+    const moveStopBetweenTrucks = async (dayIdx: number, fromTruck: 'truckA' | 'truckB', stopIdx: number) => {
         if (!monthlyPlan) return;
         const newPlan = { ...monthlyPlan };
+        const day = newPlan.days[dayIdx];
         const toTruck = fromTruck === 'truckA' ? 'truckB' : 'truckA';
-        const [stop] = newPlan.days[dayIdx][fromTruck].stops.splice(stopIdx, 1);
-        newPlan.days[dayIdx][toTruck].stops.push(stop);
+        const [stop] = day[fromTruck].stops.splice(stopIdx, 1);
+        day[toTruck].stops.push(stop);
+        await recalculateDayStatsAndTimings(day, fromTruck);
+        await recalculateDayStatsAndTimings(day, toTruck);
         setMonthlyPlan({ ...newPlan });
     };
 
-    const reorderStopInDay = (dayIdx: number, truck: 'truckA' | 'truckB', stopIdx: number, direction: 'up' | 'down') => {
+    const reorderStopInDay = async (dayIdx: number, truck: 'truckA' | 'truckB', stopIdx: number, direction: 'up' | 'down') => {
         if (!monthlyPlan) return;
         const newPlan = { ...monthlyPlan };
-        const stops = newPlan.days[dayIdx][truck].stops;
+        const day = newPlan.days[dayIdx];
+        const stops = day[truck].stops;
         const newIdx = direction === 'up' ? stopIdx - 1 : stopIdx + 1;
         if (newIdx >= 0 && newIdx < stops.length) {
             [stops[stopIdx], stops[newIdx]] = [stops[newIdx], stops[stopIdx]];
+            await recalculateDayStatsAndTimings(day, truck);
             setMonthlyPlan({ ...newPlan });
         }
+    };
+
+    const dragAndDropStop = async (
+        dayIdx: number,
+        fromTruck: 'truckA' | 'truckB',
+        fromIdx: number,
+        toTruck: 'truckA' | 'truckB',
+        toIdx: number
+    ) => {
+        if (!monthlyPlan) return;
+        const newPlan = { ...monthlyPlan };
+        const day = newPlan.days[dayIdx];
+
+        const [movedStop] = day[fromTruck].stops.splice(fromIdx, 1);
+        day[toTruck].stops.splice(toIdx, 0, movedStop);
+
+        await recalculateDayStatsAndTimings(day, 'truckA');
+        await recalculateDayStatsAndTimings(day, 'truckB');
+
+        setMonthlyPlan({ ...newPlan });
     };
 
     const dailyStats = {
@@ -492,19 +836,71 @@ const PlanningView = () => {
                 reorderStopInDay={reorderStopInDay}
                 moveStopBetweenTrucks={moveStopBetweenTrucks}
                 removeStopFromDay={removeStopFromDay}
+                dragAndDropStop={dragAndDropStop}
                 selectedFilters={selectedFilters}
                 setSelectedFilters={setSelectedFilters}
             />
 
             {/* Area de contenido principal: calendario o detalle del dia */}
             {viewMode === 'calendar' ? (
-                <CalendarGrid
-                    planYear={planYear}
-                    planMonth={planMonth}
-                    monthSummary={monthSummary}
-                    setSelectedDate={setSelectedDate}
-                    setViewMode={setViewMode}
-                />
+                <div className="space-y-5">
+                    {planningReadiness && (
+                        <div
+                            className={`rounded-2xl border p-5 ${
+                                planningReadiness.totalStops > 0 &&
+                                planningReadiness.missingLocations === 0 &&
+                                planningReadiness.activeTrucks > 0 &&
+                                planningReadiness.activeDrivers > 0
+                                    ? 'border-emerald-200 bg-emerald-50'
+                                    : 'border-amber-200 bg-amber-50'
+                            }`}
+                        >
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                <div className="flex items-start gap-4">
+                                    {planningReadiness.totalStops > 0 &&
+                                    planningReadiness.missingLocations === 0 &&
+                                    planningReadiness.activeTrucks > 0 &&
+                                    planningReadiness.activeDrivers > 0 ? (
+                                        <CheckCircle2 className="mt-1 shrink-0 text-emerald-700" size={24} />
+                                    ) : (
+                                        <AlertTriangle className="mt-1 shrink-0 text-amber-700" size={24} />
+                                    )}
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-950">
+                                            {planningReadiness.totalStops > 0 &&
+                                            planningReadiness.missingLocations === 0 &&
+                                            planningReadiness.activeTrucks > 0 &&
+                                            planningReadiness.activeDrivers > 0
+                                                ? 'Datos listos para generar'
+                                                : 'Revisa datos antes de generar'}
+                                        </h3>
+                                        <p className="mt-1 text-sm font-medium text-slate-600">
+                                            {planningReadiness.totalStops} puntos activos, {planningReadiness.missingLocations} sin ubicación, {planningReadiness.activeTrucks} unidades y {planningReadiness.activeDrivers} choferes disponibles.
+                                        </p>
+                                    </div>
+                                </div>
+                                {planningReadiness.missingLocations > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate('/colonias')}
+                                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white hover:bg-amber-700"
+                                    >
+                                        Corregir ubicaciones
+                                        <ArrowRight size={16} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    <CalendarGrid
+                        planYear={planYear}
+                        planMonth={planMonth}
+                        monthSummary={monthSummary}
+                        setSelectedDate={setSelectedDate}
+                        setViewMode={setViewMode}
+                    />
+                </div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                 {/* Barra lateral de sugerencias */}
@@ -658,7 +1054,7 @@ const PlanningView = () => {
                         <div className="bg-white rounded-[2.5rem] border border-slate-200/60 p-20 text-center shadow-premium">
                             <div className="w-16 h-16 border-4 border-orange-600/20 border-t-orange-600 rounded-full animate-spin mx-auto mb-6" />
                             <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-xs">
-                                Optimizando Logística...
+                                Cargando rutas...
                             </p>
                         </div>
                     ) : routes.length === 0 ? (
@@ -667,17 +1063,16 @@ const PlanningView = () => {
                                 <Truck size={40} className="text-slate-200" />
                             </div>
                             <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
-                                Comienza la Jornada
+                                Sin rutas para este día
                             </h2>
                             <p className="text-slate-500 font-medium max-w-sm mx-auto mb-10 text-lg">
-                                Aún no hay rutas definidas para esta fecha. Inicia creando una nueva unidad de
-                                entrega.
+                                Crea una ruta manual o genera la planeación mensual desde el botón superior.
                             </p>
                             <button
                                 onClick={handleCreateRoute}
                                 className="bg-orange-600 text-white px-10 py-5 rounded-2xl font-black shadow-2xl shadow-orange-200 hover:bg-orange-700 transition-all active:scale-95 text-lg"
                             >
-                                Crear Primer Despliegue
+                                Crear ruta manual
                             </button>
                         </div>
                     ) : (
@@ -700,7 +1095,7 @@ const PlanningView = () => {
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1.5 opacity-60">
-                                                            Flota Operativa
+                                                            Unidad
                                                         </p>
                                                         <div className="flex items-center gap-3">
                                                             <p className="text-2xl font-black text-slate-900 tracking-tighter uppercase">
@@ -723,7 +1118,7 @@ const PlanningView = () => {
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1.5 opacity-60">
-                                                            Capitán de Ruta
+                                                            Chofer
                                                         </p>
                                                         <p className="text-2xl font-black text-slate-900 tracking-tighter uppercase">
                                                             {route.driver_name || 'Sin chofer'}
@@ -751,6 +1146,13 @@ const PlanningView = () => {
                                             </div>
 
                                             <div className="flex items-center gap-4">
+                                                <button
+                                                    onClick={() => copyRouteForWhatsApp(route)}
+                                                    className="w-14 h-14 flex items-center justify-center text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all"
+                                                    title="Copiar resumen para WhatsApp"
+                                                >
+                                                    <Copy size={24} />
+                                                </button>
                                                 <button
                                                     onClick={() => exportRouteToPDF(route)}
                                                     className="w-14 h-14 flex items-center justify-center text-slate-300 hover:text-orange-600 hover:bg-orange-50 rounded-2xl transition-all"
@@ -780,85 +1182,139 @@ const PlanningView = () => {
                                             </div>
                                         </div>
 
-                                        <div className="p-12">
-                                            <div className="max-w-4xl mx-auto">
-                                                {route.stops && route.stops.length > 0 ? (
-                                                    <div className="relative space-y-10">
-                                                        {/* Linea estatica */}
-                                                        <div className="absolute left-7 top-6 bottom-6 w-0.5 bg-gradient-to-b from-slate-900 via-slate-200 to-slate-100" />
+                                            <div className="p-12">
+                                                <div className="max-w-4xl mx-auto">
+                                                    {route.stops && route.stops.length > 0 ? (
+                                                        <div
+                                                            className={`relative space-y-10 p-2 rounded-[2.5rem] border-2 transition-all duration-300 ${
+                                                                dragOverDayStop?.routeId === route.id && dragOverDayStop?.stopIndex === 'container'
+                                                                    ? 'bg-orange-50/20 border-dashed border-orange-400'
+                                                                    : 'border-transparent'
+                                                            }`}
+                                                            onDragOver={(e) => e.preventDefault()}
+                                                            onDragEnter={() => {
+                                                                if (route.stops.length === 0) {
+                                                                    setDragOverDayStop({ routeId: route.id, stopIndex: 'container' })
+                                                                }
+                                                            }}
+                                                            onDragLeave={() => {
+                                                                if (dragOverDayStop?.stopIndex === 'container') {
+                                                                    setDragOverDayStop(null)
+                                                                }
+                                                            }}
+                                                            onDrop={(e) => {
+                                                                e.preventDefault()
+                                                                setDragOverDayStop(null)
+                                                                if (!draggedDayStop) return
+                                                                if (draggedDayStop.routeId === route.id && draggedDayStop.stopIndex === route.stops.length) return
+                                                                handleDayStopDrop(route.id, route.stops.length)
+                                                            }}
+                                                        >
+                                                            {/* Linea estatica */}
+                                                            <div className="absolute left-7 top-6 bottom-6 w-0.5 bg-gradient-to-b from-slate-900 via-slate-200 to-slate-100" />
 
-                                                        {/* Punto de partida */}
-                                                        <div className="flex items-center space-x-10 relative">
-                                                            <div className="w-14 h-14 rounded-full bg-slate-900 text-white flex items-center justify-center font-black z-10 border-[6px] border-white shadow-2xl">
-                                                                <Building2 size={20} />
-                                                            </div>
-                                                            <div className="flex-1 p-6 rounded-3xl bg-slate-900 text-white shadow-2xl">
-                                                                <p className="text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-1">
-                                                                    Punto de Despegue
-                                                                </p>
-                                                                <p className="text-lg font-black tracking-tight">
-                                                                    CEDIS BAMX NUEVO LAREDO
-                                                                </p>
-                                                            </div>
-                                                        </div>
-
-                                                        {route.stops.map((stop: any, idx: number) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="flex items-center space-x-10 relative group/stop"
-                                                            >
-                                                                <div className="w-14 h-14 rounded-full bg-white text-slate-900 flex items-center justify-center font-black z-10 border-[6px] border-slate-50 shadow-lg group-hover/stop:border-orange-500 group-hover/stop:scale-110 transition-all duration-500">
-                                                                    {idx + 1}
+                                                            {/* Punto de partida */}
+                                                            <div className="flex items-center space-x-10 relative">
+                                                                <div className="w-14 h-14 rounded-full bg-slate-900 text-white flex items-center justify-center font-black z-10 border-[6px] border-white shadow-2xl">
+                                                                    <Building2 size={20} />
                                                                 </div>
-                                                                <div className="flex-1 flex items-center justify-between p-8 rounded-[2.5rem] bg-white border border-slate-200/60 shadow-sm group-hover/stop:shadow-premium group-hover/stop:border-orange-200 transition-all duration-500">
-                                                                    <div className="flex items-center gap-6">
-                                                                        <div className="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center group-hover/stop:bg-orange-50 group-hover/stop:text-orange-600 transition-colors">
-                                                                            {stop.stop_type === 'Institución' ? <Building2 size={24} /> :
-                                                                             stop.stop_type === 'Supermercado' ? <ShoppingCart size={24} /> :
-                                                                             <MapPin size={24} />}
-                                                                        </div>
-                                                                        <div>
-                                                                            <div className="flex items-center gap-3 mb-1.5">
-                                                                                <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">{stop.stop_type}</span>
-                                                                                {stop.recovery_fee > 0 && (
-                                                                                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black rounded-full border border-emerald-100 uppercase">
-                                                                                        ${stop.recovery_fee} Cobro
-                                                                                    </span>
-                                                                                )}
-                                                                                {stop.is_foreign === 1 && (
-                                                                                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[9px] font-black rounded-full border border-indigo-100 uppercase">
-                                                                                        Foráneo
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
-                                                                            <p className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">
-                                                                                {stop.stop_name || stop.stop_id}
-                                                                            </p>
-                                                                            <div className="flex items-center gap-4 mt-2">
-                                                                                <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
-                                                                                    <Package size={12} />
-                                                                                    {stop.volume} Unidades
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
+                                                                <div className="flex-1 p-6 rounded-3xl bg-slate-900 text-white shadow-2xl">
+                                                                    <p className="text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-1">
+                                                                        Salida
+                                                                    </p>
+                                                                    <p className="text-lg font-black tracking-tight">
+                                                                        CEDIS BAMX NUEVO LAREDO
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            {route.stops.map((stop: any, idx: number) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    draggable={true}
+                                                                    onDragStart={(e) => {
+                                                                        setDraggedDayStop({ routeId: route.id, stopIndex: idx })
+                                                                        e.dataTransfer.effectAllowed = 'move'
+                                                                    }}
+                                                                    onDragEnd={() => {
+                                                                        setDraggedDayStop(null)
+                                                                        setDragOverDayStop(null)
+                                                                    }}
+                                                                    onDragOver={(e) => e.preventDefault()}
+                                                                    onDragEnter={() => {
+                                                                        setDragOverDayStop({ routeId: route.id, stopIndex: idx })
+                                                                    }}
+                                                                    onDragLeave={() => {
+                                                                        if (dragOverDayStop?.stopIndex === idx && dragOverDayStop?.routeId === route.id) {
+                                                                            setDragOverDayStop(null)
+                                                                        }
+                                                                    }}
+                                                                    onDrop={(e) => {
+                                                                        e.preventDefault()
+                                                                        setDragOverDayStop(null)
+                                                                        if (!draggedDayStop) return
+                                                                        if (draggedDayStop.routeId === route.id && draggedDayStop.stopIndex === idx) return
+                                                                        handleDayStopDrop(route.id, idx)
+                                                                    }}
+                                                                    className="flex items-center space-x-10 relative group/stop cursor-grab active:cursor-grabbing"
+                                                                >
+                                                                    <div className="w-14 h-14 rounded-full bg-white text-slate-900 flex items-center justify-center font-black z-10 border-[6px] border-slate-50 shadow-lg group-hover/stop:border-orange-500 group-hover/stop:scale-110 transition-all duration-500">
+                                                                        {idx + 1}
                                                                     </div>
-                                                                    <button
-                                                                        onClick={() => setConfirmAction({
-                                                                            isOpen: true,
-                                                                            title: 'Quitar Parada',
-                                                                            message: '¿Estás seguro de quitar esta parada de la ruta actual?',
-                                                                            action: async () => {
-                                                                                await window.api.db.delete('route_stops', stop.id)
-                                                                                loadData()
-                                                                            }
-                                                                        })}
-                                                                        className="w-12 h-12 flex items-center justify-center text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover/stop:opacity-100"
-                                                                    >
-                                                                        <Trash2 size={20} />
-                                                                    </button>
+                                                                    <div className={`flex-1 flex items-center justify-between p-8 rounded-[2.5rem] border shadow-sm transition-all duration-300 ${
+                                                                        dragOverDayStop?.routeId === route.id && dragOverDayStop?.stopIndex === idx
+                                                                            ? 'border-orange-500 bg-orange-50/50 shadow-md scale-[1.01]'
+                                                                            : 'border-slate-200 bg-white group-hover/stop:shadow-premium group-hover/stop:border-orange-200'
+                                                                    }`}>
+                                                                        <div className="flex items-center gap-6">
+                                                                            <div className="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center group-hover/stop:bg-orange-50 group-hover/stop:text-orange-600 transition-colors">
+                                                                                {stop.stop_type === 'Institución' ? <Building2 size={24} /> :
+                                                                                 stop.stop_type === 'Supermercado' ? <ShoppingCart size={24} /> :
+                                                                                 stop.stop_type === 'Almacén' ? <Building2 size={24} className="text-red-500" /> :
+                                                                                 <MapPin size={24} />}
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex items-center gap-3 mb-1.5">
+                                                                                    <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">{stop.stop_type}</span>
+                                                                                    {stop.recovery_fee > 0 && (
+                                                                                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black rounded-full border border-emerald-100 uppercase">
+                                                                                            ${stop.recovery_fee} Cobro
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {stop.is_foreign === 1 && (
+                                                                                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[9px] font-black rounded-full border border-indigo-100 uppercase">
+                                                                                            Foráneo
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <p className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+                                                                                    {stop.stop_name || stop.stop_id}
+                                                                                </p>
+                                                                                <div className="flex items-center gap-4 mt-2">
+                                                                                    <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
+                                                                                        <Package size={12} />
+                                                                                        {stop.volume} Unidades
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => setConfirmAction({
+                                                                                isOpen: true,
+                                                                                title: 'Quitar Parada',
+                                                                                message: '¿Estás seguro de quitar esta parada de la ruta actual?',
+                                                                                action: async () => {
+                                                                                    await window.api.db.delete('route_stops', stop.id)
+                                                                                    loadData()
+                                                                                }
+                                                                            })}
+                                                                            className="w-12 h-12 flex items-center justify-center text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover/stop:opacity-100 cursor-pointer"
+                                                                        >
+                                                                            <Trash2 size={20} />
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ))}
+                                                            ))}
 
                                                         {route.stops && route.stops.length > 0 && (
                                                             <div className="flex items-center space-x-10 relative">
@@ -897,7 +1353,7 @@ const PlanningView = () => {
                                                                 <div className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center group-hover/add:rotate-90 transition-transform">
                                                                     <Plus size={18} className="text-orange-600" />
                                                                 </div>
-                                                                Anexar Nuevo Punto Operativo
+                                                                Agregar parada
                                                             </button>
                                                         </div>
                                                     </div>
@@ -906,9 +1362,9 @@ const PlanningView = () => {
                                                         <div className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-premium">
                                                             <ArrowRight size={32} className="text-slate-200" />
                                                         </div>
-                                                        <h4 className="text-xl font-black text-slate-900 mb-2">Configuración Vacía</h4>
+                                                        <h4 className="text-xl font-black text-slate-900 mb-2">Ruta sin paradas</h4>
                                                         <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-8">
-                                                            Aún no hay paradas asignadas a esta unidad
+                                                            Agrega puntos sugeridos o busca una parada manualmente
                                                         </p>
                                                         <button
                                                             disabled={route.status === 'Completada'}
@@ -918,7 +1374,7 @@ const PlanningView = () => {
                                                                 : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-900/10'
                                                                 }`}
                                                         >
-                                                            Vincular Inteligencia
+                                                            Agregar sugerencias
                                                         </button>
                                                     </div>
                                                 )}
@@ -932,7 +1388,7 @@ const PlanningView = () => {
                                                         <Clock size={20} className="text-orange-400" />
                                                     </div>
                                                     <div>
-                                                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1.5">Tiempo Estimado</p>
+                                                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1.5">Tiempo estimado</p>
                                                         <p className="text-white font-black tracking-tighter uppercase text-lg leading-none">
                                                             0 hrs 0 min
                                                         </p>
@@ -959,7 +1415,7 @@ const PlanningView = () => {
                                                     }}
                                                     className="w-full sm:w-auto px-12 py-5 bg-white/5 border border-white/10 text-white rounded-[1.5rem] font-black shadow-2xl hover:bg-white/10 transition-all active:scale-[0.98] flex items-center justify-center gap-4 group/edit uppercase text-xs tracking-widest"
                                                 >
-                                                    <span>Reabrir Edición</span>
+                                                    <span>Reabrir ruta</span>
                                                     <Edit3 size={18} className="group-hover/edit:rotate-12 transition-transform" />
                                                 </button>
                                             ) : (
@@ -967,7 +1423,7 @@ const PlanningView = () => {
                                                     onClick={() => handleFinishPlanning(route.id)}
                                                     className="w-full sm:w-auto px-12 py-5 bg-orange-600 text-white rounded-[1.5rem] font-black shadow-2xl shadow-orange-900/20 hover:bg-orange-500 transition-all active:scale-[0.98] flex items-center justify-center gap-4 group/final uppercase text-xs tracking-widest"
                                                 >
-                                                    <span>Concluir Operación</span>
+                                                    <span>Marcar lista</span>
                                                     <CheckCircle2 size={18} className="group-hover/final:scale-125 transition-transform" />
                                                 </button>
                                             )}
@@ -990,9 +1446,9 @@ const PlanningView = () => {
                                 <Truck size={28} className="text-white" />
                             </div>
                             <h3 className="text-3xl font-black text-slate-900 tracking-tighter">
-                                Nuevo <span className="text-orange-600">Despliegue</span>
+                                Nueva <span className="text-orange-600">ruta</span>
                             </h3>
-                            <p className="text-slate-400 text-sm font-medium mt-1">Configura una nueva unidad operativa.</p>
+                            <p className="text-slate-400 text-sm font-medium mt-1">Elige fecha, unidad y chofer.</p>
                             <button
                                 onClick={() => setIsRouteModalOpen(false)}
                                 className="absolute top-10 right-10 text-slate-300 hover:text-slate-900 transition-colors w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl"

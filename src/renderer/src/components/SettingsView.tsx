@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MapPin, Clock, Settings, ShieldCheck, Calendar, Zap, Save, RefreshCcw, AlertCircle, Trash2, Database, Download, Upload, User, Map } from 'lucide-react'
+import { MapPin, Clock, ShieldCheck, Calendar, Save, RefreshCcw, AlertCircle, Trash2, Database, Download, Upload, User, Map, Cpu } from 'lucide-react'
 
 interface Holiday {
   date: string;
@@ -7,7 +7,7 @@ interface Holiday {
 }
 
 const SettingsView = () => {
-    const [activeTab, setActiveTab] = useState<'warehouse' | 'algorithm' | 'holidays' | 'backup' | 'profile' | 'maps'>('profile')
+    const [activeTab, setActiveTab] = useState<'warehouse' | 'operation' | 'holidays' | 'backup' | 'profile' | 'maps'>('profile')
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     
@@ -20,7 +20,7 @@ const SettingsView = () => {
         avg_unloading_time: 30
     })
 
-    // Configuracion del algoritmo y general
+    // Preferencias operativas. Los parametros tecnicos se conservan ocultos para el motor de rutas.
     const [algoData, setAlgoData] = useState({
         popSize: 100,
         numGenerations: 500,
@@ -36,17 +36,80 @@ const SettingsView = () => {
     const [userName, setUserName] = useState('Christian')
 
     // Configuración de Google Maps
-    const [useGoogleMaps, setUseGoogleMaps] = useState('false')
+    const [useGoogleMaps, setUseGoogleMaps] = useState('true')
     const [googleMapsApiKey, setGoogleMapsApiKey] = useState('')
     const [verifyStatus, setVerifyStatus] = useState<{ success?: boolean; message: string } | null>(null)
     const [verifyLoading, setVerifyLoading] = useState(false)
-    const [isTutorialOpen, setIsTutorialOpen] = useState(false)
+    const [showMapsAdvanced, setShowMapsAdvanced] = useState(false)
     const [savedUseGoogleMaps, setSavedUseGoogleMaps] = useState('false')
     const [savedGoogleMapsApiKey, setSavedGoogleMapsApiKey] = useState('')
+
+    const [currentVersion, setCurrentVersion] = useState('1.0.0')
+    const [updateStatus, setUpdateStatus] = useState<{
+        checked: boolean
+        loading: boolean
+        newVersionAvailable: boolean
+        latestTagName?: string
+        latestUrl?: string
+        errorMessage?: string
+    }>({
+        checked: false,
+        loading: false,
+        newVersionAvailable: false
+    })
+
+    const handleCheckForUpdates = async () => {
+        setUpdateStatus({ checked: false, loading: true, newVersionAvailable: false })
+        try {
+            const response = await fetch('https://api.github.com/repos/ramsesreyero/BAMXPLANNER/releases/latest')
+            if (!response.ok) {
+                throw new Error('No se pudo conectar al repositorio en GitHub.')
+            }
+            const data = await response.json()
+            const latestTag = data.tag_name || ''
+            const downloadUrl = data.html_url || 'https://github.com/ramsesreyero/BAMXPLANNER/releases'
+            
+            const cleanCurrent = currentVersion.replace(/^v/, '')
+            const cleanLatest = latestTag.replace(/^v/, '')
+            
+            if (cleanLatest && cleanLatest !== cleanCurrent) {
+                setUpdateStatus({
+                    checked: true,
+                    loading: false,
+                    newVersionAvailable: true,
+                    latestTagName: latestTag,
+                    latestUrl: downloadUrl
+                })
+            } else {
+                setUpdateStatus({
+                    checked: true,
+                    loading: false,
+                    newVersionAvailable: false,
+                    latestTagName: latestTag
+                })
+            }
+        } catch (error: any) {
+            console.error("Error checking for updates:", error)
+            setUpdateStatus({
+                checked: true,
+                loading: false,
+                newVersionAvailable: false,
+                errorMessage: error?.message || 'Error de conexión con GitHub.'
+            })
+        }
+    }
 
     const fetchData = async () => {
         setLoading(true)
         try {
+            // Cargar version de la app
+            try {
+                const ver = await window.api.window.getVersion()
+                setCurrentVersion(ver)
+            } catch (e) {
+                console.error("Error loading app version:", e)
+            }
+
             // Cargar almacen
             const wData = await window.api.db.list('warehouse')
             if (wData.length > 0) {
@@ -117,6 +180,13 @@ const SettingsView = () => {
     }
 
     const handleSaveWarehouse = async () => {
+        const confirmed = window.confirm(
+            "⚠️ CONFIGURACIÓN DE ALMACÉN SENSIBLE:\n\n" +
+            "Modificar la ubicación (coordenadas) o tiempos del almacén central (CEDIS) cambiará el punto de origen y retorno de todas las rutas del mes.\n\n" +
+            "¿Desea continuar con esta actualización?"
+        );
+        if (!confirmed) return;
+
         setSaving(true)
         try {
             const existing = await window.api.db.list('warehouse')
@@ -125,7 +195,6 @@ const SettingsView = () => {
             } else {
                 await window.api.db.create('warehouse', { ...warehouseData, id: 1 })
             }
-            // Sincronizar en settings para que la generacion de rutas y otros componentes lo lean
             await window.api.settings.set('cedis_address', warehouseData.address)
             await window.api.settings.set('cedis_coords', warehouseData.coordinates)
             alert('¡Configuración de Almacén guardada exitosamente!')
@@ -137,14 +206,21 @@ const SettingsView = () => {
         }
     }
 
-    const handleSaveAlgorithm = async () => {
+    const handleSaveOperation = async () => {
+        const confirmed = window.confirm(
+            "⚠️ AJUSTE OPERATIVO DE ALGORITMO:\n\n" +
+            "Cambiar el límite de paradas diarias afectará directamente la capacidad y densidad de entregas por unidad.\n\n" +
+            "¿Desea guardar estos cambios?"
+        );
+        if (!confirmed) return;
+
         setSaving(true)
         try {
             await window.api.settings.set('algorithm_config', JSON.stringify(algoData))
-            alert('¡Configuración del Motor guardada exitosamente!')
+            alert('¡Preferencias de operación guardadas exitosamente!')
         } catch (error: any) {
-            console.error('Error saving algorithm:', error)
-            alert('Error al guardar la configuración del motor: ' + error.message)
+            console.error('Error saving operation preferences:', error)
+            alert('Error al guardar las preferencias de operación: ' + error.message)
         } finally {
             setSaving(false)
         }
@@ -175,6 +251,16 @@ const SettingsView = () => {
     }
 
     const handleSaveGoogleMaps = async () => {
+        if (useGoogleMaps === 'true') {
+            const confirmed = window.confirm(
+                "⚠️ CONFIGURACIÓN DE LLAVE SENSIBLE:\n\n" +
+                "Activar Google Maps requiere una API Key válida con facturación activa en Google Cloud (APIs de Distance Matrix, Geocoding, Directions y Places).\n" +
+                "Si la clave no es válida, la generación de rutas y mapas fallará.\n\n" +
+                "¿Desea guardar y activar Google Maps?"
+            );
+            if (!confirmed) return;
+        }
+
         setSaving(true)
         try {
             await window.api.settings.set('use_google_maps', useGoogleMaps)
@@ -218,57 +304,42 @@ const SettingsView = () => {
     }
 
     return (
-        <div className="w-full mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* Seccion de encabezado */}
-            <div className="bg-white/70 backdrop-blur-xl p-10 rounded-[3rem] border border-white/40 shadow-premium relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-50/50 blur-3xl -mr-40 -mt-40 pointer-events-none" />
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-                    <div>
-                        <div className="inline-flex items-center space-x-2 bg-indigo-50 px-3 py-1 rounded-full mb-4 border border-indigo-100">
-                            <Settings size={14} className="text-indigo-600" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Centro de Control</span>
-                        </div>
-                        <h1 className="text-5xl font-black text-slate-900 tracking-tighter">Configuración Maestra</h1>
-                        <p className="text-slate-500 mt-4 font-medium text-lg leading-relaxed">
-                            Ajusta los parámetros operativos, días inhábiles y configuración del motor de inteligencia lógica.
-                        </p>
+        <div className="w-full mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-8 items-start">
+                {/* Sidebar de Ajustes */}
+                <div className="bg-white/80 backdrop-blur-xl p-6 rounded-[2.5rem] border border-slate-200 shadow-premium space-y-6">
+                    <div className="px-2">
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter">Ajustes</h1>
+                        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Configuración general</p>
                     </div>
-                    <div className="shrink-0">
-                         <div className="p-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-inner flex flex-col items-center gap-2">
-                             <ShieldCheck size={48} className="text-indigo-600 mb-2" />
-                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Sistema Protegido</span>
-                         </div>
-                    </div>
+
+                    <nav className="flex flex-col gap-1">
+                        {[
+                            { id: 'profile', label: 'Perfil', icon: <User size={16}/> },
+                            { id: 'warehouse', label: 'Almacén', icon: <MapPin size={16}/> },
+                            { id: 'maps', label: 'Google Maps', icon: <Map size={16}/> },
+                            { id: 'operation', label: 'Operación', icon: <Calendar size={16}/> },
+                            { id: 'holidays', label: 'Días Inhábiles', icon: <Calendar size={16}/> },
+                            { id: 'backup', label: 'Base de Datos', icon: <Database size={16}/> }
+                        ].map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id as any)}
+                                className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all w-full text-left cursor-pointer ${
+                                    activeTab === tab.id 
+                                    ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-200 border border-indigo-500' 
+                                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/80'
+                                }`}
+                            >
+                                {tab.icon}
+                                <span>{tab.label}</span>
+                            </button>
+                        ))}
+                    </nav>
                 </div>
 
-                {/* Pestanas */}
-                <div className="flex gap-2 mt-12 bg-slate-100/50 p-2 rounded-3xl border border-slate-200/50 w-fit">
-                    {[
-                        { id: 'profile', label: 'Perfil', icon: <User size={18}/> },
-                        { id: 'warehouse', label: 'Almacén', icon: <MapPin size={18}/> },
-                        { id: 'maps', label: 'Google Maps', icon: <Map size={18}/> },
-                        { id: 'algorithm', label: 'Algoritmo', icon: <Zap size={18}/> },
-                        { id: 'holidays', label: 'Días Inhábiles', icon: <Calendar size={18}/> },
-                        { id: 'backup', label: 'Base de Datos', icon: <Database size={18}/> }
-                    ].map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
-                            className={`flex items-center gap-3 px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
-                                activeTab === tab.id 
-                                ? 'bg-white text-indigo-600 shadow-xl shadow-indigo-200 border border-indigo-100' 
-                                : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'
-                            }`}
-                        >
-                            {tab.icon}
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Area de contenido */}
-            <div className="min-h-[500px]">
+                {/* Area de contenido */}
+                <div className="min-h-[500px]">
                 {activeTab === 'profile' && (
                     <div className="max-w-2xl bg-white p-10 rounded-[3rem] border border-slate-200 shadow-premium space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                         <div className="flex items-center gap-4">
@@ -298,6 +369,75 @@ const SettingsView = () => {
                             <Save size={20}/>
                             Guardar Perfil
                         </button>
+
+                        <div className="border-t border-slate-100 pt-8 mt-8 space-y-6">
+                            <div className="flex items-center gap-4">
+                                <div className="p-4 bg-indigo-50 rounded-3xl text-indigo-600">
+                                    <Cpu size={24}/>
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Información del Sistema</h3>
+                                    <p className="text-slate-500 font-medium tracking-tight">Versión instalada y actualizaciones de software.</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-slate-50 p-6 rounded-3xl border border-slate-150">
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Versión del Software</p>
+                                    <p className="text-xl font-black text-slate-800 ml-1 mt-1">v{currentVersion}</p>
+                                </div>
+                                <button 
+                                    onClick={handleCheckForUpdates} 
+                                    disabled={updateStatus.loading}
+                                    className="px-6 py-3.5 bg-white text-indigo-600 border border-slate-200 rounded-2xl font-black text-xs uppercase tracking-widest shadow-sm hover:bg-slate-50 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                >
+                                    {updateStatus.loading ? (
+                                        <RefreshCcw size={14} className="animate-spin" />
+                                    ) : (
+                                        <RefreshCcw size={14} />
+                                    )}
+                                    Buscar Actualización
+                                </button>
+                            </div>
+
+                            {updateStatus.checked && !updateStatus.loading && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                    {updateStatus.newVersionAvailable ? (
+                                        <div className="p-6 rounded-[2rem] bg-indigo-50 border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                                            <div>
+                                                <h4 className="font-black text-indigo-950 text-base uppercase tracking-tight">¡Nueva versión disponible! ({updateStatus.latestTagName})</h4>
+                                                <p className="text-xs font-semibold text-indigo-700 mt-1">Descarga el nuevo instalador para actualizar las rutas y mapas.</p>
+                                            </div>
+                                            <a 
+                                                href={updateStatus.latestUrl} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 text-center"
+                                            >
+                                                <Download size={14} />
+                                                Descargar
+                                            </a>
+                                        </div>
+                                    ) : updateStatus.errorMessage ? (
+                                        <div className="p-6 rounded-[2rem] bg-red-50 border border-red-100 flex items-center gap-3 text-red-900">
+                                            <AlertCircle className="shrink-0" size={18} />
+                                            <div>
+                                                <p className="text-sm font-bold uppercase tracking-tight">Error al buscar actualizaciones</p>
+                                                <p className="text-xs font-semibold opacity-85 mt-0.5">{updateStatus.errorMessage}</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="p-6 rounded-[2rem] bg-emerald-50 border border-emerald-100 flex items-center gap-3 text-emerald-900">
+                                            <ShieldCheck className="shrink-0 text-emerald-600" size={18} />
+                                            <div>
+                                                <p className="text-sm font-bold uppercase tracking-tight">Sistema Actualizado</p>
+                                                <p className="text-xs font-semibold opacity-85 mt-0.5">Estás utilizando la versión más reciente del planeador mensual.</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
@@ -326,6 +466,10 @@ const SettingsView = () => {
                                         onChange={e => setWarehouseData({...warehouseData, coordinates: e.target.value})}
                                         className="w-full px-8 py-5 rounded-[2rem] bg-slate-50 border-transparent focus:bg-white focus:border-indigo-500/50 outline-none font-bold text-slate-900 transition-all shadow-inner"
                                     />
+                                    <div className="flex items-start gap-2 rounded-2xl bg-amber-50 border border-amber-250 p-4 text-amber-950 text-xs font-semibold mt-2">
+                                        <AlertCircle className="mt-0.5 shrink-0 text-amber-600" size={14} />
+                                        <span>⚠️ La modificación de las coordenadas reubica la base central (CEDIS). Asegúrese de que correspondan a su ubicación real para evitar fallos de cálculo.</span>
+                                    </div>
                                 </div>
                             </div>
                         </section>
@@ -360,178 +504,203 @@ const SettingsView = () => {
                 )}
 
                 {activeTab === 'maps' && (
-                    <div className="bg-white p-12 rounded-[4rem] border border-slate-200 shadow-premium animate-in fade-in slide-in-from-right-4 duration-500 max-w-3xl space-y-8">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-4">
-                            <div className="flex items-center gap-6">
-                                <div className="p-4 bg-indigo-50 rounded-3xl text-indigo-600">
-                                    <Map size={32}/>
-                                </div>
-                                <div>
-                                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Configuración de Mapas</h3>
-                                    <p className="text-slate-500 font-medium tracking-tight">Activa Google Maps para autocompletado y cálculo de distancias por tráfico.</p>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsTutorialOpen(true)}
-                                className="px-6 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm active:scale-95 shrink-0 flex items-center gap-2"
-                            >
-                                📖 Ver Guía Paso a Paso
-                            </button>
-                        </div>
-
-                        {/* Estado de la Vinculación */}
-                        {savedUseGoogleMaps === 'true' && savedGoogleMapsApiKey ? (
-                            <div className="p-6 bg-emerald-50/70 border border-emerald-100 rounded-3xl flex items-center justify-between animate-in fade-in duration-300">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black">
-                                        ✓
-                                    </div>
-                                    <div className="text-left">
-                                        <h5 className="text-xs font-black text-emerald-950 uppercase tracking-tight">Google Maps Activo y Vinculado</h5>
-                                        <p className="text-[10px] text-emerald-600 font-medium mt-0.5">El autocompletado y el cálculo de distancias están operando a través de Google Cloud.</p>
-                                    </div>
-                                </div>
-                                <span className="px-3.5 py-1.5 bg-emerald-500 text-white text-[9px] font-black uppercase tracking-wider rounded-xl">
-                                    En Línea
-                                </span>
-                            </div>
-                        ) : (
-                            <div className="p-6 bg-slate-50 border border-slate-100 rounded-3xl flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-slate-300 text-slate-600 flex items-center justify-center font-black">
-                                        !
-                                    </div>
-                                    <div className="text-left">
-                                        <h5 className="text-xs font-black text-slate-950 uppercase tracking-tight">Modo Gratuito (OpenStreetMap)</h5>
-                                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">La aplicación está utilizando el mapa libre de Leaflet y OSRM.</p>
-                                    </div>
-                                </div>
-                                <span className="px-3.5 py-1.5 bg-slate-400 text-white text-[9px] font-black uppercase tracking-wider rounded-xl">
-                                    Desconectado
-                                </span>
-                            </div>
-                        )}
-
-                        <div className="space-y-6">
-                            {/* Toggle Switch */}
-                            <div className="flex items-center justify-between p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:shadow-md transition-all duration-300">
-                                <div>
-                                    <h4 className="text-base font-black text-slate-950 uppercase tracking-tight">Habilitar Google Maps</h4>
-                                    <p className="text-xs text-slate-400 font-medium mt-1">Si está apagado, se utilizará el mapa de OpenStreetMap (Leaflet/OSRM) de forma gratuita.</p>
-                                </div>
-                                <select 
-                                    value={useGoogleMaps} 
-                                    onChange={e => setUseGoogleMaps(e.target.value)}
-                                    className="px-6 py-4 rounded-2xl bg-white border border-slate-200 font-black text-xs uppercase tracking-widest outline-none cursor-pointer text-slate-900"
-                                >
-                                    <option value="false">Desactivado (Gratuito)</option>
-                                    <option value="true">Activado (Google Maps)</option>
-                                </select>
-                            </div>
-
-                            {/* API Key Input */}
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Google Maps API Key</label>
-                                <div className="flex gap-4">
-                                    <input 
-                                        type="password" 
-                                        value={googleMapsApiKey}
-                                        onChange={e => setGoogleMapsApiKey(e.target.value)}
-                                        placeholder="AIzaSy..."
-                                        className="flex-1 px-8 py-5 rounded-[2rem] bg-slate-50 border border-slate-200 outline-none font-mono text-slate-900 transition-all shadow-inner"
-                                    />
-                                    <button 
-                                        type="button"
-                                        onClick={handleVerifyApiKey}
-                                        disabled={verifyLoading}
-                                        className="px-8 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
-                                    >
-                                        {verifyLoading ? 'Verificando...' : 'Verificar Clave'}
-                                    </button>
-                                </div>
-                                <p className="text-[10px] text-slate-400 leading-tight">La clave debe tener activadas las siguientes APIs: Maps JavaScript API, Places API, Directions API y Distance Matrix API.</p>
-                            </div>
-
-                            {/* Verification Result Display */}
-                            {verifyStatus && (
-                                <div className={`p-6 rounded-[2rem] border flex items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-300 ${
-                                    verifyStatus.success 
-                                    ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
-                                    : 'bg-red-50 border-red-100 text-red-800'
-                                }`}>
-                                    <div className="mt-0.5">
-                                        {verifyStatus.success ? <ShieldCheck size={20} className="text-emerald-600"/> : <AlertCircle size={20} className="text-red-600"/>}
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-black uppercase tracking-tight">{verifyStatus.success ? 'Conexión Exitosa' : 'Error de Conexión'}</p>
-                                        <p className="text-xs font-medium leading-relaxed">{verifyStatus.message}</p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Save Button */}
-                            <div className="pt-6">
-                                <button 
-                                    onClick={handleSaveGoogleMaps} 
-                                    disabled={saving} 
-                                    className="bg-indigo-600 text-white w-full py-6 rounded-[2rem] font-black shadow-2xl shadow-indigo-200 flex items-center justify-center gap-3 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
-                                >
-                                    <Save size={20}/>
-                                    Guardar Ajustes de Mapas
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'algorithm' && (
-                    <div className="bg-white p-12 rounded-[4rem] border border-slate-200 shadow-premium animate-in fade-in slide-in-from-right-4 duration-500">
-                        <div className="flex items-center gap-6 mb-12">
-                            <div className="p-4 bg-indigo-50 rounded-3xl text-indigo-600">
-                                <Zap size={32}/>
+                    <div className="max-w-3xl space-y-6 rounded-[2rem] border border-slate-200 bg-white p-8 shadow-premium animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex items-center gap-5">
+                            <div className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">
+                                <Map size={30}/>
                             </div>
                             <div>
-                                <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Parámetros de Inteligencia</h3>
-                                <p className="text-slate-500 font-medium tracking-tight">Configura la potencia y precisión del Algoritmo Genético.</p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                            {[
-                                { label: 'Población', key: 'popSize', type: 'number', help: 'Número de rutas simultáneas evaluándose' },
-                                { label: 'Generaciones', key: 'numGenerations', type: 'number', help: 'Ciclos de evolución por día' },
-                                { label: 'Tasa de Mutación', key: 'mutationRate', type: 'number', step: '0.01', help: 'Probabilidad de cambios aleatorios' },
-                                { label: 'Max Servicios/Día', key: 'maxRoutesPerDay', type: 'number', help: 'Límite sugerido de paradas' }
-                            ].map(item => (
-                                <div key={item.key} className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{item.label}</label>
-                                    <input 
-                                        type={item.type} 
-                                        step={item.step}
-                                        value={(algoData as any)[item.key]} 
-                                        onChange={e => setAlgoData({...algoData, [item.key]: parseFloat(e.target.value) || 0})}
-                                        className="w-full px-8 py-5 rounded-[2rem] bg-slate-50 border-transparent focus:bg-white focus:border-indigo-500/50 outline-none font-black text-slate-900 transition-all text-xl shadow-inner"
-                                    />
-                                    <p className="text-[10px] text-slate-400 leading-tight italic">{item.help}</p>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="mt-12 p-8 bg-indigo-50/50 rounded-[2.5rem] border border-indigo-100 flex items-start gap-6">
-                            <AlertCircle className="text-indigo-600 shrink-0 mt-1" size={24}/>
-                            <div className="space-y-2">
-                                <p className="text-sm font-black text-indigo-900 uppercase tracking-tight">Nota Crítica:</p>
-                                <p className="text-sm text-indigo-800 font-medium leading-relaxed">
-                                    Valores más altos en <span className="font-black">Población</span> y <span className="font-black">Generaciones</span> aumentan la precisión de las rutas pero requieren más tiempo de cómputo por mes generado.
+                                <h3 className="text-2xl font-black text-slate-900 tracking-tight">Mapas y direcciones</h3>
+                                <p className="text-sm text-slate-500 font-medium">
+                                    Google Maps queda integrado para buscar direcciones, validar ubicaciones y calcular distancias.
                                 </p>
                             </div>
                         </div>
 
-                        <div className="flex justify-end mt-12">
-                             <button onClick={handleSaveAlgorithm} disabled={saving} className="bg-slate-950 text-white px-12 py-5 rounded-[2rem] font-black shadow-2xl flex items-center gap-3 transition-opacity disabled:opacity-50">
+                        {savedUseGoogleMaps === 'true' && savedGoogleMapsApiKey ? (
+                            <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white">
+                                        <ShieldCheck size={20}/>
+                                    </div>
+                                    <div>
+                                        <h5 className="text-sm font-black text-emerald-950">Google Maps activo</h5>
+                                        <p className="text-xs font-medium text-emerald-700">
+                                            La app usará Google cuando esté disponible y mantendrá respaldo con mapas libres si falla la conexión.
+                                        </p>
+                                    </div>
+                                </div>
+                                <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">Listo</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-5">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500 text-white">
+                                        <AlertCircle size={20}/>
+                                    </div>
+                                    <div>
+                                        <h5 className="text-sm font-black text-amber-950">Google no está configurado</h5>
+                                        <p className="text-xs font-medium text-amber-700">
+                                            Se usará OpenStreetMap/OSRM como respaldo. Para activar Google, agrega la llave interna de la app.
+                                        </p>
+                                    </div>
+                                </div>
+                                <span className="rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white">Respaldo</span>
+                            </div>
+                        )}
+
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <h4 className="font-black text-slate-950">Modo avanzado</h4>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        Solo úsalo si necesitas cambiar la llave o apagar Google temporalmente.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMapsAdvanced(!showMapsAdvanced)}
+                                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                                >
+                                    {showMapsAdvanced ? 'Ocultar' : 'Mostrar'}
+                                </button>
+                            </div>
+
+                            {showMapsAdvanced && (
+                                <div className="mt-5 space-y-5">
+                                    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">
+                                        <div>
+                                            <h5 className="text-sm font-bold text-slate-950">Usar Google Maps</h5>
+                                            <p className="text-xs text-slate-500">Si se apaga, la app usa mapas libres.</p>
+                                        </div>
+                                        <select
+                                            value={useGoogleMaps}
+                                            onChange={e => setUseGoogleMaps(e.target.value)}
+                                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900"
+                                        >
+                                            <option value="true">Activado</option>
+                                            <option value="false">Apagado</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500">Llave de Google Maps</label>
+                                        <div className="flex gap-3">
+                                            <input
+                                                type="password"
+                                                value={googleMapsApiKey}
+                                                onChange={e => setGoogleMapsApiKey(e.target.value)}
+                                                placeholder="Llave integrada o personalizada"
+                                                className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-3 font-mono text-sm text-slate-900 outline-none"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleVerifyApiKey}
+                                                disabled={verifyLoading}
+                                                className="rounded-lg bg-slate-950 px-4 py-3 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+                                            >
+                                                {verifyLoading ? 'Verificando...' : 'Verificar'}
+                                            </button>
+                                        </div>
+                                        <div className="flex items-start gap-2.5 rounded-2xl bg-amber-50 border border-amber-200 p-4 text-amber-950 text-xs font-semibold mt-2">
+                                            <AlertCircle className="mt-0.5 shrink-0 text-amber-600" size={14} />
+                                            <span>⚠️ Llave de acceso sensible. Asegúrese de que correspondan a una API Key con permisos para Distance Matrix, Geocoding, Directions y Places.</span>
+                                        </div>
+                                    </div>
+
+                                    {verifyStatus && (
+                                        <div className={`flex items-start gap-3 rounded-xl border p-4 ${
+                                            verifyStatus.success
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                            : 'border-red-200 bg-red-50 text-red-800'
+                                        }`}>
+                                            {verifyStatus.success ? <ShieldCheck size={20}/> : <AlertCircle size={20}/>}
+                                            <div>
+                                                <p className="text-sm font-black">{verifyStatus.success ? 'Conexión correcta' : 'No se pudo conectar'}</p>
+                                                <p className="text-sm">{verifyStatus.message}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={handleSaveGoogleMaps}
+                                        disabled={saving}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-5 py-3 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-50"
+                                    >
+                                        <Save size={18}/>
+                                        Guardar mapas
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'operation' && (
+                    <div className="max-w-4xl bg-white p-10 rounded-[3rem] border border-slate-200 shadow-premium animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex items-center gap-6 mb-10">
+                            <div className="p-4 bg-indigo-50 rounded-3xl text-indigo-600">
+                                <Calendar size={30}/>
+                            </div>
+                            <div>
+                                <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Preferencias de operación</h3>
+                                <p className="text-slate-500 font-medium tracking-tight">Define limites sencillos para que la planeación sea practica para el equipo.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
+                            <div className="space-y-6">
+                                <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-6">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Servicios maximos por unidad al dia</label>
+                                    <div className="mt-4 flex items-center gap-4">
+                                        <input
+                                            type="range"
+                                            min="3"
+                                            max="18"
+                                            value={algoData.maxRoutesPerDay}
+                                            onChange={e => setAlgoData({ ...algoData, maxRoutesPerDay: parseInt(e.target.value, 10) || 10 })}
+                                            className="h-2 flex-1 accent-indigo-600"
+                                        />
+                                        <input
+                                            type="number"
+                                            min="3"
+                                            max="18"
+                                            value={algoData.maxRoutesPerDay}
+                                            onChange={e => setAlgoData({ ...algoData, maxRoutesPerDay: parseInt(e.target.value, 10) || 10 })}
+                                            className="w-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-xl font-black text-slate-900 outline-none"
+                                        />
+                                    </div>
+                                    <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">
+                                        Usa un numero menor si las entregas suelen tomar mas tiempo o si prefieres rutas mas ligeras para los conductores.
+                                    </p>
+                                </div>
+
+                                <div className="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-6">
+                                    <div className="flex items-start gap-4">
+                                        <ShieldCheck className="mt-1 shrink-0 text-emerald-700" size={22}/>
+                                        <div>
+                                            <h4 className="text-sm font-black uppercase tracking-tight text-emerald-950">Calculo automatico protegido</h4>
+                                            <p className="mt-1 text-sm font-medium leading-relaxed text-emerald-800">
+                                                La app mantiene reglas recomendadas por defecto. El usuario solo necesita ajustar el volumen operativo.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <aside className="rounded-[2rem] border border-indigo-100 bg-indigo-50 p-6">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Sugerencia</p>
+                                <p className="mt-3 text-4xl font-black tracking-tighter text-indigo-950">{algoData.maxRoutesPerDay}</p>
+                                <p className="mt-2 text-sm font-bold leading-relaxed text-indigo-800">
+                                    servicios por unidad es un punto de partida razonable para revisar carga, tiempos y distancias antes de enviar la ruta.
+                                </p>
+                            </aside>
+                        </div>
+
+                        <div className="flex justify-end mt-10">
+                             <button onClick={handleSaveOperation} disabled={saving} className="bg-slate-950 text-white px-12 py-5 rounded-[2rem] font-black shadow-2xl flex items-center gap-3 transition-opacity disabled:opacity-50">
                                 <Save size={20}/>
-                                Guardar Configuración de Motor
+                                Guardar operación
                              </button>
                         </div>
                     </div>
@@ -636,6 +805,8 @@ const SettingsView = () => {
                                         try {
                                             const res = await window.api.db.exportDatabase();
                                             if (res.success) {
+                                                await window.api.settings.set('last_backup_at', new Date().toISOString());
+                                                window.dispatchEvent(new Event('settings-updated'));
                                                 alert("¡Base de datos exportada con éxito!");
                                             } else if (res.error) {
                                                 alert(`Error al exportar: ${res.error}`);
@@ -685,100 +856,7 @@ const SettingsView = () => {
                     </div>
                 )}
             </div>
-            {isTutorialOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300 text-left">
-                    <div className="bg-white rounded-[3rem] shadow-[0_20px_60px_rgba(0,0,0,0.4)] border border-slate-100 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[85vh]">
-                        {/* Header */}
-                        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                            <div>
-                                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
-                                    Guía Práctica
-                                </span>
-                                <h3 className="text-3xl font-black text-slate-900 tracking-tighter mt-3">
-                                    Cómo obtener tu API Key de Google Maps
-                                </h3>
-                            </div>
-                            <button 
-                                onClick={() => setIsTutorialOpen(false)}
-                                className="text-slate-400 hover:text-slate-600 transition-colors w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-full"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        {/* Content Scroll */}
-                        <div className="flex-1 p-8 space-y-6 overflow-y-auto text-slate-700">
-                            <div className="bg-amber-50 border border-amber-100 p-6 rounded-[2rem] text-amber-800 flex items-start gap-4">
-                                <AlertCircle className="shrink-0 mt-0.5 text-amber-600" size={20} />
-                                <div className="space-y-1">
-                                    <p className="text-xs font-black uppercase tracking-tight">Importante: El servicio es gratuito</p>
-                                    <p className="text-xs font-medium leading-relaxed">
-                                        Google Maps regala <strong>$200 USD mensuales de crédito gratuito</strong>. Para las operaciones de esta app en una pequeña empresa, el consumo es virtualmente cero y no representará ningún cargo a tu tarjeta.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="space-y-6">
-                                <div className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">1</div>
-                                    <div>
-                                        <h5 className="font-black text-slate-900 text-base uppercase tracking-tight">Crear cuenta en Google Cloud Console</h5>
-                                        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-1">
-                                            Ingresa a <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-black">Google Cloud Console ↗</a> con cualquier cuenta de Google (Gmail o corporativa) y crea un nuevo proyecto (ej. "BAMX Planner").
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">2</div>
-                                    <div>
-                                        <h5 className="font-black text-slate-900 text-base uppercase tracking-tight">Activar la cuenta de Facturación</h5>
-                                        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-1">
-                                            Ve a la sección <strong>Facturación (Billing)</strong> y vincula una tarjeta de débito/crédito. Esto es obligatorio por seguridad de Google, pero recuerda que el consumo de la app se mantendrá dentro del saldo gratis de $200 USD/mes.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">3</div>
-                                    <div>
-                                        <h5 className="font-black text-slate-900 text-base uppercase tracking-tight">Habilitar las 4 APIs necesarias</h5>
-                                        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-1">
-                                            Busca en la barra superior de Google Cloud Console cada uno de estos nombres y haz clic en <strong>"Habilitar" (Enable)</strong>:
-                                        </p>
-                                        <ul className="list-disc list-inside mt-2 text-xs font-black text-slate-700 uppercase space-y-1 ml-2">
-                                            <li>Maps JavaScript API (Ver los mapas en la app)</li>
-                                            <li>Places API (Buscar y autocompletar direcciones)</li>
-                                            <li>Directions API (Dibujar trazado de calles)</li>
-                                            <li>Distance Matrix API (Cálculo lógico de rutas óptimas)</li>
-                                        </ul>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">4</div>
-                                    <div>
-                                        <h5 className="font-black text-slate-900 text-base uppercase tracking-tight">Obtener tu API Key</h5>
-                                        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-1">
-                                            Ve a <strong>APIs y Servicios ➜ Credenciales</strong>, haz clic en <strong>"+ Crear credenciales" ➜ "Clave de API"</strong>. Copia esa clave de API y pégala directamente en la pantalla de Ajustes.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-                            <button
-                                onClick={() => setIsTutorialOpen(false)}
-                                className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
-                            >
-                                Entendido, Cerrar Guía
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            </div>
         </div>
     )
 }

@@ -1,352 +1,419 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Users,
-  MapPin,
-  Building2,
-  ShoppingCart,
-  Truck,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  Calendar,
+  AlertTriangle,
   ArrowRight,
-  Settings
+  CalendarDays,
+  CheckCircle2,
+  ClipboardList,
+  Database,
+  Download,
+  MapPin,
+  Route,
+  Truck,
+  Users
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-const StatCard = ({ title, value, icon: Icon, color, trend, delay }: any) => (
-  <div
-    className="bg-white p-6 rounded-[2rem] border border-slate-200/60 shadow-premium hover:shadow-premium-hover transition-all duration-500 group animate-in fade-in slide-in-from-bottom-4 fill-mode-both"
-    style={{ animationDelay: `${delay}ms` }}
-  >
-    <div className="flex items-center justify-between">
-      <div className="space-y-1">
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{title}</p>
-        <div className="flex items-baseline space-x-2">
-          <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">{value}</h3>
-          {trend && (
-            <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-md flex items-center">
-              <TrendingUp size={10} className="mr-0.5" />
-              {trend}
-            </span>
-          )}
+type DashboardStats = {
+  colonies: any[]
+  institutions: any[]
+  supermarkets: any[]
+  beneficiaries: any[]
+  trucks: any[]
+  drivers: any[]
+  todayRoutes: any[]
+  allRoutes: any[]
+}
+
+type MissingLocationItem = {
+  id: number
+  name: string
+  type: 'Colonia' | 'Institución' | 'Supermercado' | 'Caridad'
+}
+
+const emptyStats: DashboardStats = {
+  colonies: [],
+  institutions: [],
+  supermarkets: [],
+  beneficiaries: [],
+  trucks: [],
+  drivers: [],
+  todayRoutes: [],
+  allRoutes: []
+}
+
+const StatTile = ({
+  label,
+  value,
+  icon: Icon,
+  tone = 'slate'
+}: {
+  label: string
+  value: string | number
+  icon: React.ElementType
+  tone?: 'slate' | 'orange' | 'emerald' | 'red'
+}) => {
+  const tones = {
+    slate: 'bg-slate-100 text-slate-700',
+    orange: 'bg-orange-50 text-orange-700',
+    emerald: 'bg-emerald-50 text-emerald-700',
+    red: 'bg-red-50 text-red-700'
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold text-slate-500">{label}</p>
+          <p className="mt-2 text-3xl font-black text-slate-950">{value}</p>
+        </div>
+        <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${tones[tone]}`}>
+          <Icon size={22} />
         </div>
       </div>
-      <div
-        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${color} shadow-inner`}
-      >
-        <Icon size={28} />
-      </div>
     </div>
-  </div>
-)
+  )
+}
 
 const DashboardView = () => {
-  const [stats, setStats] = useState({
-    colonies: 0,
-    institutions: 0,
-    supermarkets: 0,
-    trucks: 0,
-    drivers: 0,
-    beneficiaries: 0,
-    activeRoutes: 0,
-    weekStats: {
-      completed: 0,
-      inProgress: 0,
-      total: 0
-    }
-  })
-  const [activities, setActivities] = useState<any[]>([])
+  const [stats, setStats] = useState<DashboardStats>(emptyStats)
   const [loading, setLoading] = useState(true)
-  const [userName, setUserName] = useState('Christian')
-
-  useEffect(() => {
-    const fetchUserName = async () => {
-      try {
-        const userSetting = await window.api.settings.get('user_name')
-        if (userSetting) {
-          setUserName(userSetting.value)
-        } else {
-          setUserName('Christian')
-        }
-      } catch (err) {
-        console.error('Error fetching username:', err)
-      }
-    }
-
-    fetchUserName()
-    window.addEventListener('settings-updated', fetchUserName)
-    return () => window.removeEventListener('settings-updated', fetchUserName)
-  }, [])
+  const [userName, setUserName] = useState('Operación')
+  const [lastBackupAt, setLastBackupAt] = useState('')
+  const today = useMemo(() => new Date().toISOString().split('T')[0], [])
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [c, i, s, t, d, b, r] = await Promise.all([
-          window.api.db.list('colonies'),
-          window.api.db.list('institutions'),
-          window.api.db.list('supermarkets'),
-          window.api.db.list('trucks'),
-          window.api.db.list('drivers'),
-          window.api.db.list('beneficiaries'),
-          window.api.planning.getRoutes(new Date().toISOString().split('T')[0])
-        ])
+        const [colonies, institutions, supermarkets, trucks, drivers, beneficiaries, todayRoutes, allRoutes, user, backup] =
+          await Promise.all([
+            window.api.db.list('colonies'),
+            window.api.db.list('institutions'),
+            window.api.db.list('supermarkets'),
+            window.api.db.list('trucks'),
+            window.api.db.list('drivers'),
+            window.api.db.list('beneficiaries'),
+            window.api.planning.getRoutes(today),
+            window.api.db.list('routes'),
+            window.api.settings.get('user_name'),
+            window.api.settings.get('last_backup_at')
+          ])
+
         setStats({
-          colonies: c.length,
-          institutions: i.length,
-          supermarkets: s.length,
-          trucks: t.length,
-          drivers: d.length,
-          beneficiaries: b.length,
-          activeRoutes: r ? r.length : 0,
-          weekStats: calculateWeekStats(await window.api.db.list('routes'))
+          colonies,
+          institutions,
+          supermarkets,
+          beneficiaries,
+          trucks,
+          drivers,
+          todayRoutes: todayRoutes || [],
+          allRoutes
         })
-        const act = await window.api.planning.getRecentActivities()
-        setActivities(act)
+        setUserName(user?.value || 'Operación')
+        setLastBackupAt(backup?.value || '')
       } catch (error) {
         console.error('Error fetching dashboard stats:', error)
       } finally {
         setLoading(false)
       }
     }
+
     fetchStats()
-  }, [])
+    window.addEventListener('settings-updated', fetchStats)
+    return () => window.removeEventListener('settings-updated', fetchStats)
+  }, [today])
 
-  const calculateWeekStats = (allRoutes: any[]) => {
-    const today = new Date()
-    const firstDayOfWeek = new Date(today.setDate(today.getDate() - today.getDay()))
-    firstDayOfWeek.setHours(0, 0, 0, 0)
+  const missingLocationItems = useMemo<MissingLocationItem[]>(() => {
+    const hasCoordinates = (item: any) =>
+      item.lat !== null &&
+      item.lat !== undefined &&
+      item.lat !== '' &&
+      item.lng !== null &&
+      item.lng !== undefined &&
+      item.lng !== ''
 
-    const lastDayOfWeek = new Date(firstDayOfWeek)
-    lastDayOfWeek.setDate(lastDayOfWeek.getDate() + 6)
-    lastDayOfWeek.setHours(23, 59, 59, 999)
+    const allStops = [
+      ...stats.colonies.map((item) => ({ ...item, type: 'Colonia' })),
+      ...stats.institutions.map((item) => ({ ...item, type: 'Institución' })),
+      ...stats.supermarkets.map((item) => ({ ...item, type: 'Supermercado' })),
+      ...stats.beneficiaries.map((item) => ({ ...item, type: 'Caridad' }))
+    ]
 
-    const weekRoutes = allRoutes.filter(r => {
-      const routeDate = new Date(r.date)
-      return routeDate >= firstDayOfWeek && routeDate <= lastDayOfWeek
-    })
+    return allStops.filter((item) => !hasCoordinates(item))
+  }, [stats])
 
-    const total = weekRoutes.length
-    const completed = weekRoutes.filter(r => r.status === 'Completada').length
-    const inProgress = weekRoutes.filter(r => r.status === 'Pendiente').length
+  const missingByType = useMemo(() => {
+    return missingLocationItems.reduce<Record<MissingLocationItem['type'], number>>(
+      (acc, item) => {
+        acc[item.type] += 1
+        return acc
+      },
+      { Colonia: 0, Institución: 0, Supermercado: 0, Caridad: 0 }
+    )
+  }, [missingLocationItems])
 
-    const getPct = (val: number) => (total > 0 ? Math.round((val / total) * 100) : 0)
+  const inactiveResources = useMemo(() => {
+    const inactiveTrucks = stats.trucks.filter((truck) => truck.is_available === 0).length
+    const inactiveDrivers = stats.drivers.filter((driver) => driver.is_available === 0).length
+    return inactiveTrucks + inactiveDrivers
+  }, [stats])
 
-    return {
-      completed: getPct(completed),
-      inProgress: getPct(inProgress),
-      total: getPct(completed + inProgress)
-    }
-  }
+  const activeTrucks = stats.trucks.filter((truck) => truck.is_available !== 0).length
+  const activeDrivers = stats.drivers.filter((driver) => driver.is_available !== 0).length
+  const hasMinimumCatalogs =
+    stats.colonies.length + stats.institutions.length + stats.supermarkets.length + stats.beneficiaries.length > 0
+  const canPlan = hasMinimumCatalogs && activeTrucks > 0 && activeDrivers > 0 && missingLocationItems.length === 0
+  const backupLabel = lastBackupAt
+    ? new Date(lastBackupAt).toLocaleString('es-MX', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    : 'Sin respaldo registrado'
 
-  const greeting = () => {
-    const hour = new Date().getHours()
-    if (hour < 12) return 'Buenos días'
-    if (hour < 18) return 'Buenas tardes'
-    return 'Buenas noches'
-  }
+  const nextRoute = stats.allRoutes
+    .filter((route) => route.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date))[0]
 
   return (
-    <div className="space-y-10 pb-12">
-      {/* Seccion Hero */}
-      <div className="relative overflow-hidden rounded-[2.5rem] bg-slate-900 p-10 text-white shadow-2xl">
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-orange-600/20 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-red-600/10 blur-[80px] -ml-32 -mb-32 pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-          <div className="space-y-4">
-            <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-200">
-                BAMX Operativo: Sistema Listo
-              </span>
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
-                {greeting()}, <span className="text-orange-400">{userName}</span>
-              </h1>
-              <p className="text-slate-400 font-medium text-lg leading-relaxed">
-                Hoy es{' '}
-                {new Date().toLocaleDateString('es-MX', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long'
-                })}
-                . Tienes{' '}
-                <span className="text-white font-bold underline decoration-orange-500/50 decoration-4">
-                  {loading ? '...' : stats.activeRoutes} {stats.activeRoutes === 1 ? 'ruta' : 'rutas'}
-                </span>{' '}
-                programadas para seguimiento.
-              </p>
-            </div>
+    <div className="space-y-6">
+      <section className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-orange-700">Buenos días, {userName}</p>
+            <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">
+              Panel de operación
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Revisa lo importante, genera rutas y deja listo lo que se enviará a los conductores.
+            </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4 shrink-0">
+
+          <div className="flex flex-wrap gap-3">
             <Link
               to="/planeacion"
-              className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 rounded-2xl font-bold transition-all duration-300 shadow-lg shadow-orange-500/25 flex items-center justify-center group active:scale-95"
+              className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-orange-700"
             >
-              Nueva Planeación
-              <ArrowRight
-                size={18}
-                className="ml-2 group-hover:translate-x-1 transition-transform"
-              />
+              Generar planeación
+              <ArrowRight size={18} />
+            </Link>
+            <Link
+              to="/configuracion"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Respaldar datos
+              <Database size={18} />
             </Link>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Cuadricula de estadisticas rapidas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Colonias"
-          value={loading ? '...' : stats.colonies}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          label="Rutas de hoy"
+          value={loading ? '...' : stats.todayRoutes.length}
+          icon={Route}
+          tone={stats.todayRoutes.length > 0 ? 'emerald' : 'slate'}
+        />
+        <StatTile
+          label="Puntos registrados"
+          value={
+            loading
+              ? '...'
+              : stats.colonies.length +
+                stats.institutions.length +
+                stats.supermarkets.length +
+                stats.beneficiaries.length
+          }
           icon={MapPin}
-          color="bg-orange-50 text-orange-600"
-          trend="+2"
-          delay={100}
+          tone="orange"
         />
-        <StatCard
-          title="Instituciones"
-          value={loading ? '...' : stats.institutions}
-          icon={Building2}
-          color="bg-slate-50 text-slate-600"
-          delay={200}
-        />
-        <StatCard
-          title="Súper"
-          value={loading ? '...' : stats.supermarkets}
-          icon={ShoppingCart}
-          color="bg-orange-50 text-orange-600"
-          delay={300}
-        />
-        <StatCard
-          title="Unidades"
-          value={loading ? '...' : stats.trucks}
+        <StatTile
+          label="Unidades disponibles"
+          value={loading ? '...' : stats.trucks.filter((truck) => truck.is_available !== 0).length}
           icon={Truck}
-          color="bg-slate-50 text-slate-600"
-          delay={400}
         />
-      </div>
+        <StatTile
+          label="Choferes disponibles"
+          value={loading ? '...' : stats.drivers.filter((driver) => driver.is_available !== 0).length}
+          icon={Users}
+        />
+      </section>
 
-      {/* Cuadricula de contenido multiple */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Columna izquierda: progreso y tarjeta grande */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200/60 shadow-premium">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900 tracking-tight">
-                  Rutas de la Semana
-                </h3>
-                <p className="text-sm text-slate-400 font-medium">Cumplimiento operativo</p>
-              </div>
-              <div className="p-2 bg-slate-50 rounded-xl">
-                <Calendar size={20} className="text-slate-400" />
-              </div>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 xl:col-span-2">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-950">Trabajo pendiente</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Lo que conviene resolver antes de generar o enviar rutas.
+              </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {[
-                {
-                  label: 'Completadas',
-                  value: stats.weekStats.completed,
-                  color: 'text-orange-600',
-                  bg: 'bg-orange-600'
-                },
-                {
-                  label: 'En Proceso',
-                  value: stats.weekStats.inProgress,
-                  color: 'text-orange-500',
-                  bg: 'bg-orange-500'
-                }
-              ].map((item, idx) => (
-                <div key={idx} className="space-y-4">
-                  <div className="flex items-end justify-between">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      {item.label}
-                    </span>
-                    <span className={`text-2xl font-black ${item.color}`}>{item.value}%</span>
-                  </div>
-                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${item.bg} rounded-full transition-all duration-1000`}
-                      style={{ width: `${item.value}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ClipboardList className="text-slate-300" size={24} />
           </div>
 
-          <div className="bg-orange-600 rounded-[2.5rem] p-10 text-white relative overflow-hidden shadow-2xl group cursor-pointer active:scale-[0.99] transition-all duration-300">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-[60px] -mr-24 -mt-24 group-hover:bg-white/20 transition-all duration-500" />
-            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-              <div className="space-y-4 text-center md:text-left">
-                <h2 className="text-3xl font-black tracking-tight text-white">Optimizar Logística</h2>
-                <p className="text-orange-100/80 font-medium">
-                  La inteligencia de rutas sugiere 3 ajustes para reducir el consumo de combustible
-                  mañana.
-                </p>
-                <Link
-                  to="/planeacion"
-                  className="bg-white text-orange-600 px-6 py-2.5 rounded-xl font-bold hover:shadow-xl transition-all inline-block"
+          <div className="mt-5 space-y-3">
+            <Link
+              to="/planeacion"
+              className="flex items-center justify-between rounded-lg border border-slate-200 p-4 hover:bg-slate-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-700">
+                  <CalendarDays size={20} />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-950">Preparar planeación mensual</p>
+                  <p className="text-sm text-slate-500">
+                    Genera, revisa y guarda las rutas del periodo.
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="text-slate-300" size={20} />
+            </Link>
+
+            <Link
+              to="/colonias"
+              className={`flex items-center justify-between rounded-lg border p-4 ${
+                missingLocationItems.length > 0
+                  ? 'border-amber-200 bg-amber-50/60'
+                  : 'border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                    missingLocationItems.length > 0
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-emerald-50 text-emerald-700'
+                  }`}
                 >
-                  Ver Sugerencias
-                </Link>
+                  {missingLocationItems.length > 0 ? (
+                    <AlertTriangle size={20} />
+                  ) : (
+                    <CheckCircle2 size={20} />
+                  )}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-950">
+                    {missingLocationItems.length > 0
+                      ? `${missingLocationItems.length} puntos sin ubicación`
+                      : 'Ubicaciones listas'}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    Las coordenadas ayudan a calcular rutas más confiables.
+                  </p>
+                </div>
               </div>
-              <div className="p-6 bg-white/10 backdrop-blur-md rounded-[2rem] border border-white/20 transform rotate-6 group-hover:rotate-0 transition-transform duration-500">
-                <TrendingUp size={80} className="text-white" />
+              <ArrowRight className="text-slate-300" size={20} />
+            </Link>
+
+            {missingLocationItems.length > 0 && (
+              <div className="grid grid-cols-1 gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-2">
+                {[
+                  { label: 'Colonias', count: missingByType.Colonia, to: '/colonias' },
+                  { label: 'Instituciones', count: missingByType.Institución, to: '/instituciones' },
+                  { label: 'Supermercados', count: missingByType.Supermercado, to: '/supermercados' },
+                  { label: 'Caridad', count: missingByType.Caridad, to: '/caridad' }
+                ]
+                  .filter((item) => item.count > 0)
+                  .map((item) => (
+                    <Link
+                      key={item.label}
+                      to={item.to}
+                      className="flex items-center justify-between rounded-md bg-white/70 px-3 py-2 text-sm font-bold text-amber-900 hover:bg-white"
+                    >
+                      <span>{item.label}</span>
+                      <span>{item.count}</span>
+                    </Link>
+                  ))}
               </div>
-            </div>
+            )}
+
+            <Link
+              to="/unidades"
+              className={`flex items-center justify-between rounded-lg border p-4 ${
+                inactiveResources > 0 ? 'border-slate-200 bg-slate-50' : 'border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                  <Truck size={20} />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-950">Flota y choferes</p>
+                  <p className="text-sm text-slate-500">
+                    {inactiveResources > 0
+                      ? `${inactiveResources} recursos marcados como no disponibles.`
+                      : 'Recursos listos para asignarse.'}
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="text-slate-300" size={20} />
+            </Link>
           </div>
         </div>
 
-        {/* Columna derecha: flujo de actividad */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200/60 shadow-premium flex flex-col relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 blur-3xl rounded-full -mr-16 -mt-16" />
-          <h3 className="text-xl font-bold text-slate-900 tracking-tight mb-8 flex items-center relative z-10">
-            <Clock size={22} className="mr-3 text-slate-300" />
-            Actividad Reciente
-          </h3>
-          <div className="space-y-8 flex-1 relative z-10">
-            {activities.map((activity: any, idx) => {
-              const Icon = 
-                activity.icon === 'CheckCircle2' ? CheckCircle2 :
-                activity.icon === 'Users' ? Users :
-                activity.icon === 'MapPin' ? MapPin :
-                activity.icon === 'Truck' ? Truck :
-                activity.icon === 'Settings' ? Settings : Clock;
-
-              return (
-                <div
-                  key={idx}
-                  className="flex items-start space-x-4 group cursor-pointer hover:translate-x-1 transition-transform animate-in fade-in slide-in-from-right-4 fill-mode-both"
-                  style={{ animationDelay: `${idx * 50}ms` }}
-                >
-                  <div
-                    className={`mt-1 w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 shadow-sm transition-all group-hover:scale-110`}
-                  >
-                    <Icon size={18} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-slate-800 leading-tight group-hover:text-orange-600 transition-colors uppercase tracking-tight line-clamp-2">
-                      {activity.text}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">
-                      {activity.time}
-                    </p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          <Link
-            to="/historial"
-            className="mt-10 w-full py-4 bg-slate-50 text-slate-500 rounded-2xl text-xs font-black uppercase tracking-[0.2em] border border-slate-100 hover:bg-slate-100 transition-all active:scale-95 text-center block"
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="text-lg font-black text-slate-950">Estado para planear</h2>
+          <div
+            className={`mt-4 rounded-lg border p-4 ${
+              canPlan ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'
+            }`}
           >
-            Historial Completo
+            <div className="flex items-start gap-3">
+              {canPlan ? (
+                <CheckCircle2 className="mt-0.5 text-emerald-700" size={20} />
+              ) : (
+                <AlertTriangle className="mt-0.5 text-amber-700" size={20} />
+              )}
+              <div>
+                <p className={`text-sm font-black ${canPlan ? 'text-emerald-950' : 'text-amber-950'}`}>
+                  {canPlan ? 'Datos listos' : 'Revisión recomendada'}
+                </p>
+                <p className={`mt-1 text-xs font-medium ${canPlan ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {canPlan
+                    ? 'Puedes generar la planeación mensual con datos completos.'
+                    : 'Completa ubicaciones, unidades y choferes antes de generar rutas.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h2 className="mt-6 text-lg font-black text-slate-950">Siguiente ruta</h2>
+          {nextRoute ? (
+            <div className="mt-5 rounded-lg bg-slate-950 p-5 text-white">
+              <p className="text-sm font-semibold text-orange-300">{nextRoute.date}</p>
+              <p className="mt-2 text-2xl font-black">{nextRoute.type || 'Entrega'}</p>
+              <p className="mt-1 text-sm text-slate-400">{nextRoute.status || 'Pendiente'}</p>
+              <Link
+                to={`/planeacion?month=${new Date(nextRoute.date + 'T12:00:00').getMonth()}&year=${new Date(nextRoute.date + 'T12:00:00').getFullYear()}`}
+                className="mt-5 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-bold text-slate-950"
+              >
+                Ver planeación
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-6 text-center">
+              <CalendarDays className="mx-auto text-slate-300" size={36} />
+              <p className="mt-3 text-sm font-semibold text-slate-600">No hay rutas futuras guardadas.</p>
+            </div>
+          )}
+
+          <Link to="/configuracion" className="mt-4 block rounded-lg border border-slate-200 p-4 hover:bg-slate-50">
+            <div className="flex items-center gap-3">
+              <Download className="text-slate-400" size={20} />
+              <div>
+                <p className="text-sm font-bold text-slate-950">Respaldo recomendado</p>
+                <p className="text-xs text-slate-500">
+                  Último respaldo: {backupLabel}.
+                </p>
+              </div>
+            </div>
           </Link>
         </div>
-      </div>
+      </section>
     </div>
   )
 }

@@ -1,14 +1,54 @@
 import { ipcMain } from 'electron'
 import { initDB } from '../database'
 
+const BUILT_IN_GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || ''
+
 // Helper to fetch Google Maps API Key from the database settings
 function getApiKey(): string | null {
   const db = initDB()
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('google_maps_api_key') as { value: string } | undefined
-  return row?.value || null
+  return row?.value || BUILT_IN_GOOGLE_MAPS_API_KEY || null
 }
 
 export function registerGoogleMapsHandlers() {
+  ipcMain.handle('google-maps:geocode', async (_, address: string) => {
+    try {
+      const apiKey = getApiKey()
+      if (!apiKey) {
+        throw new Error('Google Maps no está configurado.')
+      }
+      if (!address?.trim()) {
+        return { success: false, error: 'Escribe una dirección para buscar.' }
+      }
+
+      const query = `${address}, Nuevo Laredo, Tamaulipas, México`
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Google Geocoding respondió con código ${response.status}`)
+      }
+
+      const data = await response.json()
+      if (data.status !== 'OK' || !data.results?.length) {
+        return {
+          success: false,
+          error: data.error_message || `No se encontró una ubicación para "${address}".`
+        }
+      }
+
+      const result = data.results[0]
+      return {
+        success: true,
+        address: result.formatted_address,
+        lat: result.geometry.location.lat,
+        lng: result.geometry.location.lng
+      }
+    } catch (error: any) {
+      console.error('Error in Google Maps Geocode IPC:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
   // Verify API Key
   ipcMain.handle('google-maps:verify-key', async (_, key: string) => {
     try {

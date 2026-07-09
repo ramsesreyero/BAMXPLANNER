@@ -38,6 +38,148 @@ body {
     color: theme('colors.slate.100');
 }
 
+.dark .bg-white,
+.dark .bg-white\/70,
+.dark .bg-white\/80,
+.dark .bg-white\/90 {
+    background-color: rgba(15, 23, 42, 0.94) !important;
+}
+
+.dark .bg-white\/50,
+.dark .bg-white\/60 {
+    background-color: rgba(15, 23, 42, 0.72) !important;
+}
+
+.dark .bg-slate-50,
+.dark .bg-slate-50\/50,
+.dark .bg-slate-100,
+.dark .bg-slate-100\/50 {
+    background-color: rgba(30, 41, 59, 0.72) !important;
+}
+
+.dark .bg-indigo-50,
+.dark .bg-indigo-50\/50 {
+    background-color: rgba(67, 56, 202, 0.18) !important;
+}
+
+.dark .bg-emerald-50 {
+    background-color: rgba(6, 95, 70, 0.18) !important;
+}
+
+.dark .bg-amber-50 {
+    background-color: rgba(146, 64, 14, 0.2) !important;
+}
+
+.dark .bg-orange-50 {
+    background-color: rgba(154, 52, 18, 0.22) !important;
+}
+
+.dark .bg-red-50 {
+    background-color: rgba(153, 27, 27, 0.2) !important;
+}
+
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+    color: theme('colors.slate.100') !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400 {
+    color: theme('colors.slate.300') !important;
+}
+
+.dark .text-indigo-950,
+.dark .text-indigo-900,
+.dark .text-indigo-800,
+.dark .text-indigo-700 {
+    color: theme('colors.indigo.200') !important;
+}
+
+.dark .text-emerald-950,
+.dark .text-emerald-900,
+.dark .text-emerald-800,
+.dark .text-emerald-700 {
+    color: theme('colors.emerald.200') !important;
+}
+
+.dark .text-amber-950,
+.dark .text-amber-900,
+.dark .text-amber-800,
+.dark .text-amber-700 {
+    color: theme('colors.amber.200') !important;
+}
+
+.dark .border-white,
+.dark .border-white\/40,
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-200\/50 {
+    border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+.dark .border-indigo-100,
+.dark .border-indigo-200 {
+    border-color: rgba(129, 140, 248, 0.28) !important;
+}
+
+.dark .border-emerald-200 {
+    border-color: rgba(52, 211, 153, 0.24) !important;
+}
+
+.dark .border-amber-200 {
+    border-color: rgba(251, 191, 36, 0.24) !important;
+}
+
+.dark .border-red-200 {
+    border-color: rgba(248, 113, 113, 0.24) !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+    background-color: rgba(2, 6, 23, 0.78) !important;
+    border-color: rgba(148, 163, 184, 0.26) !important;
+    color: theme('colors.slate.100') !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+    color: theme('colors.slate.500') !important;
+}
+
+.dark input[type="date"],
+.dark input[type="time"] {
+    color-scheme: dark;
+}
+
+.dark table thead tr,
+.dark thead.bg-slate-50,
+.dark thead .bg-slate-50 {
+    background-color: rgba(15, 23, 42, 0.92) !important;
+}
+
+.dark tbody tr:hover,
+.dark tr.hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-white\/50:hover {
+    background-color: rgba(30, 41, 59, 0.82) !important;
+}
+
+.dark .shadow-premium,
+.dark .shadow-premium-hover,
+.dark .shadow-xl,
+.dark .shadow-2xl {
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.32) !important;
+}
+
+.dark .shadow-indigo-200,
+.dark .shadow-orange-200 {
+    --tw-shadow-color: rgba(0, 0, 0, 0.28) !important;
+}
+
 @utility glass {
     @apply backdrop-blur-xl bg-white/60 border border-white/40 shadow-sm;
     background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);

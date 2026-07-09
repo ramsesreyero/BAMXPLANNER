@@ -30,7 +30,7 @@ function seed() {
 
   // 2. Seed Trucks
   console.log('Seeding Trucks...');
-  const insertTruck = db.prepare('INSERT INTO trucks (name, capacity_pantries, capacity_volume, type) VALUES (?, ?, ?, ?)');
+  const insertTruck = db.prepare('INSERT INTO trucks (name, capacity_kg, capacity_volume, type) VALUES (?, ?, ?, ?)');
   insertTruck.run('Unidad Pesada BAMX (Grande)', 500, 2500, 'Camión');
   insertTruck.run('Unidad Ligera 01', 200, 1000, 'Camioneta');
 

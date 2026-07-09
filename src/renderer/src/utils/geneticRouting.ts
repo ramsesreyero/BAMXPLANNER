@@ -28,6 +28,10 @@ export interface RouteStop {
   estimatedDeparture?: string;
   /** Minutos de tránsito desde la parada anterior */
   transitMinutes?: number;
+  /** Fecha original cuando fue movida por saturación/capacidad */
+  reprogrammedFrom?: string;
+  /** Nota visible para explicar ajustes automáticos */
+  planningNote?: string;
 }
 
 export interface GeneticRouteResult {
@@ -113,8 +117,12 @@ export class GeneticRouting {
   private calculateFitness(ind: Individual): void {
     let totalDistance = 0;
     let totalDuration = 0;
-    let currentLoad = 0;
+    let currentLoad = this.stops.reduce((acc, stop) => {
+      return stop.demand < 0 ? acc + Math.abs(stop.demand) : acc;
+    }, 0);
     let capacityPenalty = 0;
+
+    if (currentLoad > this.truckCapacity) capacityPenalty += 8000;
 
     for (let j = 1; j < ind.sequence.length; j++) {
       const prev = ind.sequence[j - 1];
@@ -123,7 +131,13 @@ export class GeneticRouting {
 
       totalDistance += this.distances[prev][curr];
       totalDuration += this.durations[prev][curr] + (stop.serviceTimeMinutes ?? 15);
-      currentLoad += stop.demand;
+      if (stop.type !== 'warehouse') {
+        if (stop.demand < 0) {
+          currentLoad -= Math.abs(stop.demand);
+        } else {
+          currentLoad += stop.demand;
+        }
+      }
 
       if (currentLoad > this.truckCapacity) capacityPenalty += 8000;
       if (currentLoad < 0) capacityPenalty += 8000;

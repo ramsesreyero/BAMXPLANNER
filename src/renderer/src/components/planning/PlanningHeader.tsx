@@ -1,5 +1,5 @@
 import React from 'react'
-import { Calendar, ChevronLeft, ChevronRight, Zap, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Wand2 } from 'lucide-react'
 
 interface PlanningHeaderProps {
   viewMode: 'calendar' | 'day'
@@ -28,117 +28,126 @@ export const PlanningHeader: React.FC<PlanningHeaderProps> = ({
   setIsMonthlyModalOpen,
   handleCreateRoute
 }) => {
-  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+  const monthNames = [
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre'
+  ]
+
+  const moveMonth = (direction: -1 | 1) => {
+    if (direction === -1 && planMonth === 0) {
+      setPlanMonth(11)
+      setPlanYear(planYear - 1)
+      return
+    }
+    if (direction === 1 && planMonth === 11) {
+      setPlanMonth(0)
+      setPlanYear(planYear + 1)
+      return
+    }
+    setPlanMonth(planMonth + direction)
+  }
+
+  const moveDay = (direction: -1 | 1) => {
+    const d = new Date(selectedDate + 'T12:00:00')
+    d.setDate(d.getDate() + direction)
+    setSelectedDate(d.toISOString().split('T')[0])
+  }
 
   return (
-    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white/80 backdrop-blur-xl p-8 rounded-[3rem] border border-white/40 shadow-premium relative overflow-hidden group w-full">
-      <div className="absolute top-0 right-0 w-96 h-96 bg-orange-100/30 blur-[100px] -mr-48 -mt-48 pointer-events-none group-hover:bg-orange-200/40 transition-all duration-1000" />
-      
-      <div className="relative z-10">
-        <div className="inline-flex items-center space-x-2 bg-slate-900 text-white px-4 py-1.5 rounded-full mb-4 shadow-lg shadow-slate-900/20">
-          <Zap size={14} className="text-orange-400 fill-orange-400" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em]">
-            Dashboard Operativo
-          </span>
-        </div>
-        <h1 className="text-5xl font-black text-slate-900 tracking-tighter leading-none">
-          Planeación <span className="text-orange-600">BAMX</span>
-        </h1>
-        <div className="flex items-center gap-3 mt-3">
-          <Calendar size={18} className="text-orange-500" />
-          <p className="text-slate-500 font-bold">
-            {viewMode === 'day' ? dayName : `Mes de ${monthNames[planMonth]} ${planYear}`}
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-orange-700">
+            {viewMode === 'day' ? 'Detalle del día' : 'Calendario mensual'}
+          </p>
+          <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">
+            {viewMode === 'day' ? dayName : `${monthNames[planMonth]} ${planYear}`}
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Genera rutas, revisa cargas y deja listo lo que se enviará a cada conductor.
           </p>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-4 relative z-10">
-        <div className="bg-slate-100/50 backdrop-blur-md p-2 rounded-2xl border border-white/60 flex items-center shadow-inner">
-          {viewMode === 'day' ? (
-            <>
-              <button 
-                onClick={() => setViewMode('calendar')}
-                className="bg-white text-orange-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all border border-orange-100 shadow-sm mr-2 flex items-center gap-2"
-              >
-                <ChevronLeft size={14} /> Mensual
-              </button>
-              <button 
-                onClick={() => {
-                  const d = new Date(selectedDate)
-                  d.setDate(d.getDate() - 1)
-                  setSelectedDate(d.toISOString().split('T')[0])
-                }}
-                className="p-2 text-slate-400 hover:text-orange-600 hover:bg-white rounded-xl transition-all"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent px-4 py-2 text-sm font-black text-slate-900 focus:outline-none cursor-pointer"
-              />
-              <button 
-                onClick={() => {
-                  const d = new Date(selectedDate)
-                  d.setDate(d.getDate() + 1)
-                  setSelectedDate(d.toISOString().split('T')[0])
-                }}
-                className="p-2 text-slate-400 hover:text-orange-600 hover:bg-white rounded-xl transition-all"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </>
-          ) : (
-            <>
-              <button 
-                onClick={() => {
-                  if (planMonth === 0) {
-                    setPlanMonth(11)
-                    setPlanYear(planYear - 1)
-                  } else {
-                    setPlanMonth(planMonth - 1)
-                  }
-                }}
-                className="p-2 text-slate-400 hover:text-orange-600 hover:bg-white rounded-xl transition-all"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <div className="px-4 py-2 text-sm font-black text-slate-900 uppercase">
-                {monthNames[planMonth]} {planYear}
-              </div>
-              <button 
-                onClick={() => {
-                  if (planMonth === 11) {
-                    setPlanMonth(0)
-                    setPlanYear(planYear + 1)
-                  } else {
-                    setPlanMonth(planMonth + 1)
-                  }
-                }}
-                className="p-2 text-slate-400 hover:text-orange-600 hover:bg-white rounded-xl transition-all"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </>
-          )}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
+            {viewMode === 'day' ? (
+              <>
+                <button
+                  onClick={() => setViewMode('calendar')}
+                  className="rounded-md bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm"
+                >
+                  Mes
+                </button>
+                <button
+                  onClick={() => moveDay(-1)}
+                  className="rounded-md p-2 text-slate-500 hover:bg-white hover:text-slate-950"
+                  title="Día anterior"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent px-2 py-2 text-sm font-bold text-slate-900 outline-none"
+                />
+                <button
+                  onClick={() => moveDay(1)}
+                  className="rounded-md p-2 text-slate-500 hover:bg-white hover:text-slate-950"
+                  title="Día siguiente"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => moveMonth(-1)}
+                  className="rounded-md p-2 text-slate-500 hover:bg-white hover:text-slate-950"
+                  title="Mes anterior"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="min-w-36 px-3 py-2 text-center text-sm font-black text-slate-950">
+                  {monthNames[planMonth]} {planYear}
+                </div>
+                <button
+                  onClick={() => moveMonth(1)}
+                  className="rounded-md p-2 text-slate-500 hover:bg-white hover:text-slate-950"
+                  title="Mes siguiente"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            )}
+          </div>
+
+          <button
+            onClick={() => setIsMonthlyModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-5 py-3 text-sm font-bold text-white hover:bg-orange-700"
+          >
+            <Wand2 size={18} />
+            Generar plan
+          </button>
+
+          <button
+            onClick={handleCreateRoute}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+          >
+            <Plus size={18} />
+            Ruta manual
+          </button>
         </div>
-        
-        <button
-          onClick={() => setIsMonthlyModalOpen(true)}
-          className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center space-x-2 group/month"
-        >
-          <Calendar size={20} className="group-hover/month:scale-110 transition-transform" />
-          <span>Plan Mensual</span>
-        </button>
-
-        <button
-          onClick={handleCreateRoute}
-          className="bg-orange-600 text-white px-8 py-4 rounded-2xl font-black shadow-2xl shadow-orange-200 hover:bg-orange-700 transition-all active:scale-95 flex items-center space-x-2"
-        >
-          <Plus size={20} />
-          <span>Nueva Ruta</span>
-        </button>
       </div>
     </div>
   )
