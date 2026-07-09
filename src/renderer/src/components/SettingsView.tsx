@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MapPin, Clock, ShieldCheck, Calendar, Save, RefreshCcw, AlertCircle, Trash2, Database, Download, Upload, User, Map, Cpu } from 'lucide-react'
+import { resetGoogleMapsLoader } from '../utils/googleMapsLoader'
 
 interface Holiday {
   date: string;
@@ -266,6 +267,8 @@ const SettingsView = () => {
             await window.api.settings.set('google_maps_api_key', googleMapsApiKey)
             setSavedUseGoogleMaps(useGoogleMaps)
             setSavedGoogleMapsApiKey(googleMapsApiKey)
+            // Reset the SDK cache so the next map load uses the updated key
+            resetGoogleMapsLoader()
             window.dispatchEvent(new Event('settings-updated'))
             alert('¡Configuración de Google Maps guardada exitosamente!')
         } catch (error: any) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MapPin, Clock, ShieldCheck } from 'lucide-react'
-import { AddressAutocomplete } from '../AddressAutocomplete'
+import { AddressAutocomplete } from './AddressAutocomplete'
 
 const WarehouseView = () => {
   const [loading, setLoading] = useState(true)

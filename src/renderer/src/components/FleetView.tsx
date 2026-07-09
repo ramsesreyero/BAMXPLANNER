@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import TrucksView from './fleet/TrucksView';
-import DriversView from './fleet/DriversView';
+import TrucksView from './TrucksView';
+import DriversView from './DriversView';
 
 const FleetView = () => {
   const [activeTab, setActiveTab] = useState('unidades');

@@ -1,6 +1,33 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 
+/* Custom theme switch animations (View Transition API) */
+::view-transition-group(root) {
+  animation-duration: 0.5s;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+  height: 100%;
+  overflow: clip;
+}
+
+/* Base styles for View Transitions */
+html {
+  view-transition-name: root;
+}
+
+/* Make sure the incoming view (new) is always drawn on top of the outgoing view (old) */
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 9999;
+}
+
+
 @theme {
     --color-brand-primary: var(--brand-primary);
     --color-brand-secondary: var(--brand-secondary);
@@ -21,6 +48,7 @@
     --app-border: rgba(203, 213, 225, 0.72);
     --app-text: #0f172a;
     --app-text-muted: #64748b;
+    --app-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
 }
 
 .dark {
@@ -34,6 +62,7 @@
     --app-border: rgba(148, 163, 184, 0.18);
     --app-text: #f8fafc;
     --app-text-muted: #cbd5e1;
+    --app-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
 }
 
 body {
@@ -43,6 +72,92 @@ body {
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "cv02", "cv05", "cv11";
     transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* App-level polish: keeps generated/newer screens aligned with the operational UI. */
+.rounded-\[4rem\],
+.rounded-\[3rem\] {
+    border-radius: 1.5rem !important;
+}
+
+.rounded-\[2\.5rem\],
+.rounded-\[1\.5rem\] {
+    border-radius: 1rem !important;
+}
+
+.shadow-premium,
+.shadow-premium-hover {
+    box-shadow: var(--app-shadow) !important;
+}
+
+main h1 {
+    letter-spacing: 0 !important;
+    line-height: 1.05;
+}
+
+main p,
+main span,
+main button,
+main input,
+main select,
+main textarea,
+main td,
+main th {
+    letter-spacing: 0;
+}
+
+main table {
+    table-layout: fixed;
+}
+
+main th,
+main td {
+    vertical-align: middle;
+}
+
+main tbody tr {
+    border-color: var(--app-border) !important;
+}
+
+.fixed.inset-0 {
+    padding: 1rem;
+}
+
+.fixed.inset-0 > div {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 2rem);
+}
+
+.fixed.inset-0 form {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+    main h1 {
+        font-size: 2rem !important;
+    }
+
+    main .p-8 {
+        padding: 1.25rem !important;
+    }
+
+    main .px-8 {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    main .py-6 {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    .fixed.inset-0 .grid-cols-2,
+    .fixed.inset-0 .grid-cols-3 {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
 }
 
 .dark body {

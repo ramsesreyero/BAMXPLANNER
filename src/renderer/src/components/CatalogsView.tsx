@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import ColoniasView from './catalogs/ColoniasView';
-import InstitutionsView from './catalogs/InstitutionsView';
-import SupermarketsView from './catalogs/SupermarketsView';
-import CaridadView from './catalogs/CaridadView';
-import WarehouseView from './catalogs/WarehouseView';
+import ColoniasView from './ColoniasView';
+import InstitutionsView from './InstitutionsView';
+import SupermarketsView from './SupermarketsView';
+import CaridadView from './CaridadView';
+import WarehouseView from './WarehouseView';
 
 const CatalogsView = () => {
   const [activeTab, setActiveTab] = useState('colonias');

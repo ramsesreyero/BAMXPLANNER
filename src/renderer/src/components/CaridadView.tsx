@@ -88,7 +88,6 @@ const CaridadView = () => {
     b.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const uniquePB = new Set(beneficiaries.map(b => b.pb).filter(Boolean)).size
 
   return (
     <>
@@ -118,12 +117,6 @@ const CaridadView = () => {
               <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-2xl border border-slate-100">
                 <span className="text-2xl font-black text-slate-700">{filtered.length}</span>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">Resultados<br/>Filtrados</span>
-              </div>
-            )}
-            {uniquePB > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-pink-50 rounded-2xl border border-pink-100">
-                <span className="text-2xl font-black text-pink-600">{uniquePB}</span>
-                <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest leading-tight">Puestos<br/>Base (P.B.)</span>
               </div>
             )}
           </div>
@@ -334,7 +327,8 @@ const CaridadView = () => {
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="absolute top-10 right-10 text-slate-300 hover:text-slate-600 transition-colors w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded-full"
+                type="button"
+                className="absolute top-8 right-8 z-[100] text-slate-700 hover:text-slate-950 transition-all w-10 h-10 flex items-center justify-center hover:bg-slate-200/60 active:scale-95 rounded-full font-bold text-xl cursor-pointer"
               >
                 ✕
               </button>

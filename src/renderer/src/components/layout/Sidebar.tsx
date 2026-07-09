@@ -58,7 +58,6 @@ const NavItem = ({
 }
 
 export const Sidebar = () => {
-  const [userName, setUserName] = useState('Operación')
   const [todayRoutes, setTodayRoutes] = useState(0)
   const todayLabel = useMemo(
     () =>
@@ -73,9 +72,6 @@ export const Sidebar = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const userSetting = await window.api.settings.get('user_name')
-        setUserName(userSetting?.value || 'Operación')
-
         const routes = await window.api.planning.getRoutes(new Date().toISOString().split('T')[0])
         setTodayRoutes(routes?.length || 0)
       } catch (err) {
@@ -133,10 +129,6 @@ export const Sidebar = () => {
 
       <div className="border-t border-slate-200 p-3">
         <NavItem to="/configuracion" icon={Settings} label="Ajustes" />
-        <div className="mt-3 rounded-lg bg-slate-950 px-3 py-3 text-white dark:bg-slate-900 dark:ring-1 dark:ring-slate-800">
-          <p className="truncate text-sm font-bold">{userName}</p>
-          <p className="mt-0.5 text-xs text-slate-400">Uso local</p>
-        </div>
       </div>
     </aside>
   )

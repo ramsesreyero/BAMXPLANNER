@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { loadGoogleMaps } from '../utils/googleMapsLoader'
 
@@ -13,59 +13,157 @@ export interface GoogleItemMapModalProps {
   } | null
 }
 
+// ─── Leaflet Map para el modal ────────────────────────────────────────────────
+const LeafletItemMap: React.FC<{ lat: number; lng: number; name: string; type: string }> = ({
+  lat, lng, name, type
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const initLeaflet = () => {
+      const L = (window as any).L
+      if (!L || !containerRef.current) return
+
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
+
+      const center: [number, number] = [lat, lng]
+      const map = L.map(containerRef.current, { zoomControl: true }).setView(center, 16)
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
+      }).addTo(map)
+
+      // Custom animated marker
+      const markerHtml = `
+        <div style="display:flex;flex-direction:column;align-items:center;">
+          <div style="width:28px;height:28px;border-radius:50%;background:#4f46e5;border:3px solid white;box-shadow:0 4px 12px rgba(79,70,229,0.5);animation:drop 0.4s ease;"></div>
+          <div style="width:2px;height:12px;background:#4f46e5;opacity:0.5;"></div>
+        </div>`
+      const icon = L.divIcon({
+        html: markerHtml,
+        className: '',
+        iconSize: [28, 42],
+        iconAnchor: [14, 42]
+      })
+
+      const marker = L.marker(center, { icon }).addTo(map)
+
+      // Popup with name and type
+      marker.bindPopup(`
+        <div style="font-family:sans-serif;padding:4px 2px;">
+          <div style="font-weight:800;font-size:13px;color:#0f172a;text-transform:uppercase;">${name}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:3px;">Tipo: ${type}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+        </div>
+      `).openPopup()
+
+      mapRef.current = map
+      setTimeout(() => map.invalidateSize(), 100)
+    }
+
+    if ((window as any).L) {
+      initLeaflet()
+    } else {
+      if (!document.getElementById('leaflet-css')) {
+        const link = document.createElement('link')
+        link.id = 'leaflet-css'
+        link.rel = 'stylesheet'
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+        document.head.appendChild(link)
+      }
+      if (!document.getElementById('leaflet-js')) {
+        const script = document.createElement('script')
+        script.id = 'leaflet-js'
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+        script.onload = initLeaflet
+        document.head.appendChild(script)
+      } else {
+        // Script exists but may still be loading — poll briefly
+        let attempts = 0
+        const interval = setInterval(() => {
+          attempts++
+          if ((window as any).L) { clearInterval(interval); initLeaflet() }
+          if (attempts > 30) clearInterval(interval)
+        }, 100)
+      }
+    }
+
+    return () => {
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
+    }
+  }, [lat, lng])
+
+  return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 const GoogleItemMapModal: React.FC<GoogleItemMapModalProps> = ({ isOpen, onClose, item }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
   const markerRef = useRef<google.maps.Marker | null>(null)
+  const [mapMode, setMapMode] = useState<'loading' | 'google' | 'leaflet'>('loading')
 
   useEffect(() => {
-    if (!isOpen || !item || !item.lat || !item.lng || !mapContainerRef.current) return
+    if (!isOpen || !item?.lat || !item?.lng) return
 
     let active = true
+    setMapMode('loading')
 
     const initMap = async () => {
       try {
-        const google = await loadGoogleMaps()
-        if (!active) return
+        const useGMSetting = await window.api.settings.get('use_google_maps')
+        const apiKeySetting = await window.api.settings.get('google_maps_api_key')
 
-        const center = { lat: parseFloat(item.lat.toString()), lng: parseFloat(item.lng.toString()) }
+        if (useGMSetting?.value === 'true' && apiKeySetting?.value) {
+          try {
+            const google = await loadGoogleMaps()
+            if (!active || !mapContainerRef.current) return
 
-        const mapOptions: google.maps.MapOptions = {
-          center,
-          zoom: 16,
-          disableDefaultUI: false, // Keep default UI elements like zoom buttons
-          zoomControl: true,
-          mapTypeControl: true,
-          streetViewControl: true, // Allow street view for verification!
-          styles: [
-            // Subtly styling the map to look premium but highly readable
-            {
-              "featureType": "all",
-              "stylers": [{ "saturation": -20 }]
+            const center = {
+              lat: parseFloat(item.lat.toString()),
+              lng: parseFloat(item.lng.toString())
             }
-          ]
+
+            const map = new google.maps.Map(mapContainerRef.current, {
+              center,
+              zoom: 16,
+              zoomControl: true,
+              mapTypeControl: true,
+              streetViewControl: true,
+              styles: [{ featureType: 'all', stylers: [{ saturation: -20 }] }]
+            })
+            mapRef.current = map
+
+            const marker = new google.maps.Marker({
+              position: center,
+              map,
+              title: item.name,
+              animation: google.maps.Animation.DROP
+            })
+            markerRef.current = marker
+
+            const infoWindow = new google.maps.InfoWindow({
+              content: `<div style="padding: 5px; color: #0f172a; font-family: sans-serif;">
+                <div style="font-weight: 800; font-size: 13px; text-transform: uppercase;">${item.name}</div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Tipo: ${item.type}</div>
+              </div>`
+            })
+            infoWindow.open(map, marker)
+
+            if (active) setMapMode('google')
+            return
+          } catch {
+            // fall through to Leaflet
+          }
         }
 
-        const map = new google.maps.Map(mapContainerRef.current!, mapOptions)
-        mapRef.current = map
-
-        const marker = new google.maps.Marker({
-          position: center,
-          map,
-          title: item.name,
-          animation: google.maps.Animation.DROP
-        })
-        markerRef.current = marker
-
-        const infoWindow = new google.maps.InfoWindow({
-          content: `<div style="padding: 5px; color: #0f172a; font-family: sans-serif;">
-            <div style="font-weight: 800; font-size: 13px; text-transform: uppercase;">${item.name}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Tipo: ${item.type}</div>
-          </div>`
-        })
-        infoWindow.open(map, marker)
-      } catch (error) {
-        console.error("Error al inicializar Google Maps en Modal:", error)
+        if (active) setMapMode('leaflet')
+      } catch {
+        if (active) setMapMode('leaflet')
       }
     }
 
@@ -75,6 +173,7 @@ const GoogleItemMapModal: React.FC<GoogleItemMapModalProps> = ({ isOpen, onClose
       active = false
       if (markerRef.current) markerRef.current.setMap(null)
       mapRef.current = null
+      markerRef.current = null
     }
   }, [isOpen, item])
 
@@ -83,7 +182,7 @@ const GoogleItemMapModal: React.FC<GoogleItemMapModalProps> = ({ isOpen, onClose
   return createPortal(
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
       <div className="bg-white rounded-[3rem] shadow-2xl border border-white/20 w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col h-[80vh]">
-        
+
         {/* Header */}
         <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white z-10">
           <div>
@@ -91,6 +190,11 @@ const GoogleItemMapModal: React.FC<GoogleItemMapModalProps> = ({ isOpen, onClose
               <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-700">
                 Ubicación de {item.type}
               </span>
+              {mapMode === 'leaflet' && (
+                <span className="text-[10px] font-black uppercase tracking-widest text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-100 ml-1">
+                  OpenStreetMap
+                </span>
+              )}
             </div>
             <h3 className="text-3xl font-black text-slate-900 tracking-tighter">
               {item.name}
@@ -105,9 +209,31 @@ const GoogleItemMapModal: React.FC<GoogleItemMapModalProps> = ({ isOpen, onClose
         </div>
 
         {/* Map Body */}
-        <div className="flex-1 relative bg-slate-50">
+        <div className="flex-1 relative bg-slate-50 overflow-hidden">
           {item.lat && item.lng ? (
-            <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
+            <>
+              {/* Google Maps container (hidden until mode is confirmed) */}
+              {mapMode === 'google' && (
+                <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
+              )}
+
+              {/* Leaflet fallback */}
+              {mapMode === 'leaflet' && (
+                <LeafletItemMap
+                  lat={parseFloat(item.lat.toString())}
+                  lng={parseFloat(item.lng.toString())}
+                  name={item.name}
+                  type={item.type}
+                />
+              )}
+
+              {/* Loading state */}
+              {mapMode === 'loading' && (
+                <div className="flex h-full items-center justify-center bg-slate-100">
+                  <p className="text-sm text-slate-400 font-medium animate-pulse">Cargando mapa...</p>
+                </div>
+              )}
+            </>
           ) : (
             <div className="flex-1 h-full flex items-center justify-center text-slate-400">
               No hay coordenadas registradas
@@ -118,7 +244,9 @@ const GoogleItemMapModal: React.FC<GoogleItemMapModalProps> = ({ isOpen, onClose
         {/* Footer */}
         <div className="p-6 bg-white border-t border-slate-100 shrink-0 flex items-center justify-between">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-            {item.lat && item.lng ? `Coordenadas: ${parseFloat(item.lat.toString()).toFixed(6)}, ${parseFloat(item.lng.toString()).toFixed(6)}` : 'Sin Ubicación'}
+            {item.lat && item.lng
+              ? `Coordenadas: ${parseFloat(item.lat.toString()).toFixed(6)}, ${parseFloat(item.lng.toString()).toFixed(6)}`
+              : 'Sin Ubicación'}
           </p>
           <div className="space-x-3">
             <button
@@ -134,7 +262,7 @@ const GoogleItemMapModal: React.FC<GoogleItemMapModalProps> = ({ isOpen, onClose
                 rel="noreferrer"
                 className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/20 transition-all text-sm active:scale-95 inline-flex items-center space-x-2"
               >
-                <span>Google Maps</span>
+                <span>Ver en Google Maps</span>
                 <span>↗</span>
               </a>
             )}

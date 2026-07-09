@@ -348,7 +348,8 @@ const ColoniasView = () => {
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="absolute top-10 right-10 text-slate-300 hover:text-slate-600 transition-colors w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded-full"
+                type="button"
+                className="absolute top-8 right-8 z-[100] text-slate-700 hover:text-slate-950 transition-all w-10 h-10 flex items-center justify-center hover:bg-slate-200/60 active:scale-95 rounded-full font-bold text-xl cursor-pointer"
               >
                 ✕
               </button>

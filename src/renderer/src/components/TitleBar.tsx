@@ -3,7 +3,7 @@ import { Minus, Square, X, Sun, Moon, Heart } from 'lucide-react'
 
 interface TitleBarProps {
     isDarkMode: boolean
-    onToggleDarkMode: () => void
+    onToggleDarkMode: (event: React.MouseEvent) => void
 }
 
 const TitleBar: React.FC<TitleBarProps> = ({ isDarkMode, onToggleDarkMode }) => {

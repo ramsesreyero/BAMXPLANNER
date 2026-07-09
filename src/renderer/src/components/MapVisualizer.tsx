@@ -112,8 +112,21 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ route = [], hideSi
     };
     fetchCedis();
     window.addEventListener('settings-updated', fetchCedis);
-    return () => window.removeEventListener('settings-updated', fetchCedis);
+
+    // When Google Maps auth fails at runtime (key deleted/disabled from Cloud Console),
+    // GoogleMapVisualizer dispatches this event so we can force-switch to Leaflet mode
+    const handleGoogleMapsFailed = () => {
+      console.warn('[MapVisualizer] Recibido google-maps-failed: cambiando a OpenStreetMap/Leaflet.')
+      setUseGoogleMaps(false)
+    }
+    window.addEventListener('google-maps-failed', handleGoogleMapsFailed)
+
+    return () => {
+      window.removeEventListener('settings-updated', fetchCedis)
+      window.removeEventListener('google-maps-failed', handleGoogleMapsFailed)
+    }
   }, []);
+
 
 
 

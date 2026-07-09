@@ -27,6 +27,7 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
   const [simIndex, setSimIndex] = useState(0)
   const [cedisCoords, setCedisCoords] = useState("27.477850806886945,-99.49498391012905")
   const [mapLoaded, setMapLoaded] = useState(false)
+  const [mapFailed, setMapFailed] = useState(false)
 
   // 1. Cargar coordenadas del CEDIS
   useEffect(() => {
@@ -132,6 +133,14 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
 
     const initMap = async () => {
       try {
+        // Guard: only load Google Maps SDK if key is configured
+        const useGMSetting = await window.api.settings.get('use_google_maps')
+        const apiKeySetting = await window.api.settings.get('google_maps_api_key')
+        if (useGMSetting?.value !== 'true' || !apiKeySetting?.value) {
+          console.info('[GoogleMapVisualizer] Sin clave de API: el mapa no se cargará.')
+          return
+        }
+
         const google = await loadGoogleMaps()
         if (!active) return
 
@@ -210,7 +219,12 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
         infoWindowRef.current = new google.maps.InfoWindow()
         setMapLoaded(true)
       } catch (error) {
-        console.error("Error al inicializar el mapa de Google Maps:", error)
+        console.warn('[GoogleMapVisualizer] Google Maps no disponible, activando fallback Leaflet:', error)
+        if (active) {
+          setMapFailed(true)
+          // Notify MapVisualizer (parent) to switch to Leaflet mode
+          window.dispatchEvent(new CustomEvent('google-maps-failed'))
+        }
       }
     }
 
@@ -512,6 +526,14 @@ export const GoogleMapVisualizer: React.FC<GoogleMapVisualizerProps> = ({ route 
         )}
 
         <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
+
+        {/* Fallback: cuando Google Maps falla, mostrar mensaje mientras el padre carga Leaflet */}
+        {mapFailed && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 z-[500] text-center px-8">
+            <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-slate-300 text-sm font-bold">Cargando mapa alternativo (OpenStreetMap)...</p>
+          </div>
+        )}
 
         {hideSidebar && (
           <div className="absolute bottom-10 right-10 bg-slate-900/90 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 shadow-2xl z-[1000] flex items-center gap-4">
