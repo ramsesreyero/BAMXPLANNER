@@ -27,17 +27,17 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
   }, [isDarkMode])
 
   return (
-    <div className={`flex flex-col h-screen w-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-inter transition-colors duration-300 ${isDarkMode ? 'dark' : ''}`}>
+    <div className={`flex h-screen w-screen flex-col overflow-hidden bg-[var(--app-bg)] text-slate-900 transition-colors duration-300 dark:text-slate-100 font-inter ${isDarkMode ? 'dark' : ''}`}>
       <TitleBar isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
 
         {/* Main Content Area */}
-        <main className="flex-1 flex flex-col overflow-hidden relative bg-slate-100 dark:bg-slate-900/50">
+        <main className="relative flex flex-1 flex-col overflow-hidden bg-[var(--app-bg)] transition-colors duration-300">
 
 
-          <div className="flex-1 p-6 overflow-y-auto relative scroll-smooth overflow-x-hidden">
+          <div className="relative flex-1 overflow-y-auto overflow-x-hidden p-6 scroll-smooth">
             <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both">
               {children}
             </div>
