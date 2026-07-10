@@ -54,12 +54,13 @@ export function registerDbHandlers() {
     if (!filePath) return { success: false, cancelled: true }
 
     try {
-      const userDataPath = app.getPath('userData')
-      const dbPath = join(userDataPath, 'banco_alimentos.db')
-      fs.copyFileSync(dbPath, filePath)
+      // Use better-sqlite3 native backup feature to safely export
+      // This flushes all WAL changes and prevents exporting a locked/corrupt file
+      const db = initDB()
+      await db.backup(filePath)
       return { success: true }
     } catch (error: any) {
-      console.error('Error exporting database:', error)
+      console.error('Error exporting database via native backup:', error)
       return { success: false, error: error.message }
     }
   })
@@ -83,16 +84,29 @@ export function registerDbHandlers() {
     const selectedPath = filePaths[0]
 
     try {
+      // Safety check: verify that the chosen file is actually a valid SQLite database
+      const DatabaseConstructor = require('better-sqlite3')
+      let testDb: any = null
+      try {
+        testDb = new DatabaseConstructor(selectedPath, { readonly: true })
+        // Attempt a simple query to ensure schemas are readable
+        testDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()
+      } catch (e: any) {
+        return { success: false, error: 'El archivo seleccionado no es una base de datos SQLite válida o está dañado.' }
+      } finally {
+        if (testDb) testDb.close()
+      }
+
       const userDataPath = app.getPath('userData')
       const dbPath = join(userDataPath, 'banco_alimentos.db')
 
-      // 1. Cerrar la conexión activa
+      // 1. Close current connection
       closeDB()
 
-      // 2. Reemplazar el archivo
+      // 2. Safely replace the file
       fs.copyFileSync(selectedPath, dbPath)
 
-      // 3. Inicializar nuevamente la DB
+      // 3. Re-initialize
       initDB()
 
       return { success: true }
