@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon.png?asset'
 import { initDB } from './database'
@@ -49,6 +49,24 @@ app.whenReady().then(() => {
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.electron')
   }
+
+  // Define minimal native Edit Menu to restore standard copy/paste/input keys on Windows production
+  const template = [
+    {
+      label: 'Editar',
+      submenu: [
+        { label: 'Deshacer', role: 'undo' },
+        { label: 'Rehacer', role: 'redo' },
+        { type: 'separator' },
+        { label: 'Cortar', role: 'cut' },
+        { label: 'Copiar', role: 'copy' },
+        { label: 'Pegar', role: 'paste' },
+        { label: 'Seleccionar todo', role: 'selectAll' }
+      ]
+    }
+  ]
+  const menu = Menu.buildFromTemplate(template as any)
+  Menu.setApplicationMenu(menu)
 
   // Inicializar la base de datos
   const db = initDB() // Obtener la instancia de la base de datos
