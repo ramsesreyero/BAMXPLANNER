@@ -10,7 +10,17 @@ const BUILT_IN_GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || ''
 export function initDB(): DbType {
   if (db) return db
 
-  const userDataPath = app.getPath('userData')
+  let userDataPath = app.getPath('userData')
+  
+  // Normalize path to resolve non-ASCII/spaces in Windows user directory
+  try {
+    if (fs.existsSync(userDataPath)) {
+      userDataPath = fs.realpathSync(userDataPath)
+    }
+  } catch (e) {
+    console.warn('Could not resolve real path for userData:', e)
+  }
+
   const dbPath = join(userDataPath, 'banco_alimentos.db')
 
   // Asegurar que el directorio exista (normalmente userData existe, pero es mejor verificar)
@@ -21,9 +31,16 @@ export function initDB(): DbType {
 
   console.log('Opening database at:', dbPath)
   try {
-    db = new Database(dbPath)
+    // Timeout of 5000ms prevents the application from freezing forever in the background
+    // if the database file is locked or busy.
+    db = new Database(dbPath, { timeout: 5000 })
+    
+    // Enable Foreign Keys, WAL mode for crash resilience, and Normal synchrony for speed/safety
     db.pragma('foreign_keys = ON')
-    console.log('Database opened successfully')
+    db.pragma('journal_mode = WAL')
+    db.pragma('synchronous = NORMAL')
+    
+    console.log('Database opened successfully with WAL mode enabled')
   } catch (err) {
     console.error('FAILED TO OPEN DATABASE:', err)
     throw err

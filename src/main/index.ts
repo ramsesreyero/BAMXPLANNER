@@ -8,6 +8,25 @@ import { registerSettingsHandlers } from './ipc/settingsHandlers'
 import { registerWindowHandlers } from './ipc/windowHandlers'
 import { registerGoogleMapsHandlers } from './ipc/googleMapsHandlers'
 
+// ─── Single Instance Lock ─────────────────────────────────────────────────────
+// Prevents multiple instances of the app from running concurrently, which
+// locks the database file and freezes the app in the background.
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  console.log('Another instance is already running. Quitting this instance.')
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // Focus the existing window if user tries to open a second instance
+    const windows = BrowserWindow.getAllWindows()
+    if (windows.length > 0) {
+      const mainWin = windows[0]
+      if (mainWin.isMinimized()) mainWin.restore()
+      mainWin.focus()
+    }
+  })
+}
+
 function createWindow(): void {
   // Crear la ventana del navegador.
   const mainWindow = new BrowserWindow({
@@ -68,26 +87,36 @@ app.whenReady().then(() => {
   const menu = Menu.buildFromTemplate(template as any)
   Menu.setApplicationMenu(menu)
 
-  // Inicializar la base de datos
-  const db = initDB() // Obtener la instancia de la base de datos
+  // Inicializar la base de datos de manera segura
+  let db: any = null
+  try {
+    db = initDB() // Obtener la instancia de la base de datos
 
-  // Migracion simple para las coordenadas
-  try {
-    db.exec("ALTER TABLE colonies ADD COLUMN lat REAL;")
-    db.exec("ALTER TABLE colonies ADD COLUMN lng REAL;")
-  } catch (e) {}
-  try {
-    db.exec("ALTER TABLE institutions ADD COLUMN lat REAL;")
-    db.exec("ALTER TABLE institutions ADD COLUMN lng REAL;")
-  } catch (e) {}
-  try {
-    db.exec("ALTER TABLE supermarkets ADD COLUMN lat REAL;")
-    db.exec("ALTER TABLE supermarkets ADD COLUMN lng REAL;")
-  } catch (e) {}
-  try {
-    db.exec("ALTER TABLE beneficiaries ADD COLUMN lat REAL;")
-    db.exec("ALTER TABLE beneficiaries ADD COLUMN lng REAL;")
-  } catch (e) {}
+    // Migracion simple para las coordenadas
+    try {
+      db.exec("ALTER TABLE colonies ADD COLUMN lat REAL;")
+      db.exec("ALTER TABLE colonies ADD COLUMN lng REAL;")
+    } catch (e) {}
+    try {
+      db.exec("ALTER TABLE institutions ADD COLUMN lat REAL;")
+      db.exec("ALTER TABLE institutions ADD COLUMN lng REAL;")
+    } catch (e) {}
+    try {
+      db.exec("ALTER TABLE supermarkets ADD COLUMN lat REAL;")
+      db.exec("ALTER TABLE supermarkets ADD COLUMN lng REAL;")
+    } catch (e) {}
+    try {
+      db.exec("ALTER TABLE beneficiaries ADD COLUMN lat REAL;")
+      db.exec("ALTER TABLE beneficiaries ADD COLUMN lng REAL;")
+    } catch (e) {}
+  } catch (error: any) {
+    console.error('Error crítico al inicializar la base de datos:', error)
+    const { dialog } = require('electron')
+    dialog.showErrorBox(
+      'Error de Base de Datos',
+      `No se pudo inicializar la base de datos de la aplicación.\n\nDetalles del error: ${error.message || error}\n\nSi el problema persiste, intenta renombrar o eliminar la carpeta del programa en %APPDATA%.`
+    )
+  }
 
   // Registrar los manejadores IPC modulares
   registerDbHandlers()
