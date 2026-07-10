@@ -83,6 +83,35 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  // Initialize auto-updates in production mode
+  if (app.isPackaged) {
+    const { autoUpdater } = require('electron-updater')
+    const { dialog } = require('electron')
+
+    // Optional settings: download updates automatically in background
+    autoUpdater.autoDownload = true
+
+    // Check for updates
+    autoUpdater.checkForUpdatesAndNotify()
+
+    autoUpdater.on('update-downloaded', (info: any) => {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Actualización Disponible',
+        message: `Una nueva versión (${info.version}) ha sido descargada. ¿Deseas reiniciar la aplicación para actualizar ahora?`,
+        buttons: ['Reiniciar y Actualizar', 'Más tarde']
+      }).then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall()
+        }
+      })
+    })
+
+    autoUpdater.on('error', (err: any) => {
+      console.error('Error in auto-updater:', err)
+    })
+  }
+
   app.on('activate', function () {
     // En macOS es comun volver a crear una ventana cuando se
     // hace clic en el icono del dock y no hay otras ventanas abiertas.
