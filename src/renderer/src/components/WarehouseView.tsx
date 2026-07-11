@@ -17,7 +17,14 @@ const WarehouseView = () => {
     try {
       const data = await window.api.db.list('warehouse')
       if (data.length > 0) {
-        setFormData(data[0] as any)
+        const w = data[0]
+        setFormData({
+          address: w.address || '',
+          coordinates: w.coordinates || '',
+          opening_time: w.opening_time || '08:00',
+          closing_time: w.closing_time || '18:00',
+          avg_unloading_time: w.avg_unloading_time || 30
+        })
       }
     } catch (error) {
       console.error('Error loading warehouse settings:', error)

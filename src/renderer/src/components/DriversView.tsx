@@ -165,12 +165,12 @@ const DriversView = () => {
                     onClick={() => {
                       setEditingDriver(driver)
                       setFormData({
-                        name: driver.name,
+                        name: driver.name || '',
                         photo_url: driver.photo_url || '',
                         license_data: driver.license_data || '',
                         license_photo: driver.license_photo || '',
-                        available_days: driver.available_days,
-                        max_hours_per_day: driver.max_hours_per_day,
+                        available_days: driver.available_days || 'Lunes,Martes,Miércoles,Jueves,Viernes',
+                        max_hours_per_day: driver.max_hours_per_day || 8,
                         is_available: driver.is_available ?? 1
                       })
                       setIsModalOpen(true)

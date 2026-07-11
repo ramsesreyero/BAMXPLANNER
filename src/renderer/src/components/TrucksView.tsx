@@ -66,17 +66,17 @@ const TrucksView = () => {
   const handleEdit = (t: TruckData) => {
     setEditingTruck(t)
     setFormData({
-      name: t.name,
-      capacity_kg: t.capacity_kg,
-      capacity_volume: t.capacity_volume,
+      name: t.name || '',
+      capacity_kg: t.capacity_kg || 0,
+      capacity_volume: t.capacity_volume || 0,
       fuel_capacity: t.fuel_capacity || 0,
       insurance_policy: t.insurance_policy || '',
       insurance_name: t.insurance_name || '',
       insurance_phone: t.insurance_phone || '',
-      insurance_type: t.insurance_type || 'Cobertura amplia',
+      insurance_type: t.insurance_type === 'Daños a terceros' ? 'Daños a terceros' : 'Cobertura amplia',
       loading_nip: t.loading_nip || '',
       is_refrigerated: t.is_refrigerated ?? 1,
-      type: t.type as 'Camión' | 'Camioneta',
+      type: t.type === 'Camioneta' ? 'Camioneta' : 'Camión',
       is_available: t.is_available ?? 1
     })
     setIsModalOpen(true)

@@ -274,13 +274,13 @@ const CaridadView = () => {
                           onClick={() => {
                             setEditingBeneficiary(b)
                             setFormData({
-                              name: b.name,
-                              address: b.address,
+                              name: b.name || '',
+                              address: b.address || '',
                               folio: b.folio || '',
                               phone: b.phone || '',
                               pb: b.pb || '',
-                              restriction_day: b.restriction_day,
-                              avg_delivery_time: b.avg_delivery_time,
+                              restriction_day: b.restriction_day || 'Ninguna',
+                              avg_delivery_time: b.avg_delivery_time || 15,
                               lat: b.lat || 0,
                               lng: b.lng || 0
                             })

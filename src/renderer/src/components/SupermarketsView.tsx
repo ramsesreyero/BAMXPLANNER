@@ -86,11 +86,11 @@ const SupermarketsView = () => {
   const handleEdit = (market: Supermarket) => {
     setEditingSupermarket(market)
     setFormData({
-      name: market.name,
-      address: market.address,
-      collection_days: market.collection_days,
-      avg_volume: market.avg_volume,
-      loading_time: market.loading_time,
+      name: market.name || '',
+      address: market.address || '',
+      collection_days: market.collection_days || 'Lunes-Sábado',
+      avg_volume: market.avg_volume || 0,
+      loading_time: market.loading_time || 15,
       lat: market.lat || 0,
       lng: market.lng || 0,
       is_foreign: market.is_foreign || 0

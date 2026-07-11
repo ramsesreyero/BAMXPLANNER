@@ -113,7 +113,14 @@ const SettingsView = () => {
             // Cargar almacen
             const wData = await window.api.db.list('warehouse')
             if (wData.length > 0) {
-                setWarehouseData(wData[0] as any)
+                const w = wData[0]
+                setWarehouseData({
+                    address: w.address || '',
+                    coordinates: w.coordinates || '',
+                    opening_time: w.opening_time || '08:00',
+                    closing_time: w.closing_time || '18:00',
+                    avg_unloading_time: w.avg_unloading_time || 30
+                })
             } else {
                 // Si la tabla warehouse esta vacia, intentar leer de settings
                 const addrStr = await window.api.settings.get('cedis_address')

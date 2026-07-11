@@ -83,11 +83,11 @@ const InstitutionsView = () => {
   const handleEdit = (inst: Institution) => {
     setEditingInstitution(inst)
     setFormData({
-      name: inst.name,
-      address: inst.address,
-      fixed_day: inst.fixed_day,
-      estimated_kg: inst.estimated_kg,
-      delivery_time: inst.delivery_time,
+      name: inst.name || '',
+      address: inst.address || '',
+      fixed_day: inst.fixed_day || 'Lunes',
+      estimated_kg: inst.estimated_kg || 0,
+      delivery_time: inst.delivery_time || 15,
       lat: inst.lat || 0,
       lng: inst.lng || 0
     })

@@ -89,12 +89,12 @@ const ColoniasView = () => {
   const handleEdit = (colony: Colony) => {
     setEditingColony(colony)
     setFormData({
-      name: colony.name,
-      type: colony.type,
-      pantry_count: colony.pantry_count,
-      collection_point: colony.collection_point,
-      frequency: colony.frequency,
-      preferred_day: colony.preferred_day,
+      name: colony.name || '',
+      type: colony.type === 'Rural' ? 'Rural' : 'Urbana',
+      pantry_count: colony.pantry_count || 0,
+      collection_point: colony.collection_point || '',
+      frequency: colony.frequency || '',
+      preferred_day: colony.preferred_day || '',
       lat: colony.lat || 0,
       lng: colony.lng || 0,
       recovery_fee: colony.recovery_fee || 0
