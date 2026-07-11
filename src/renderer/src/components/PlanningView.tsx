@@ -138,6 +138,8 @@ const PlanningView = () => {
         id: ''
     })
     const [manualOptions, setManualOptions] = useState<any[]>([])
+    const [manualSearchTerm, setManualSearchTerm] = useState('')
+    const [sidebarMode, setSidebarMode] = useState<'sugerencias' | 'manual'>('sugerencias')
 
     // Mensual
     const [isMonthlyModalOpen, setIsMonthlyModalOpen] = useState(false)
@@ -464,7 +466,22 @@ const PlanningView = () => {
             type === 'Institución' ? 'institutions' : 'supermarkets'
         const options = await window.api.db.list(table)
         setManualOptions(options)
+        setManualSearchTerm('')
         setManualAddData({ type, id: options[0]?.id?.toString() || '' })
+    }
+
+    const filteredManualOptions = manualOptions.filter((opt) =>
+        opt.name.toLowerCase().includes(manualSearchTerm.toLowerCase()) ||
+        (opt.address || opt.collection_point || '').toLowerCase().includes(manualSearchTerm.toLowerCase())
+    )
+
+    const openManualFlow = async (type: string = 'Colonia') => {
+        await loadManualOptions(type)
+        setStopFormData({
+            route_id: routes.find(r => r.status !== 'Completada')?.id?.toString() || routes[0]?.id?.toString() || ''
+        })
+        setSidebarMode('manual')
+        setIsManualAddOpen(true)
     }
 
     const filteredSuggestions = suggestions.filter((s) => {
@@ -906,9 +923,9 @@ const PlanningView = () => {
                 {/* Barra lateral de sugerencias */}
                 <div className="lg:col-span-1 space-y-6">
                     <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] border border-slate-200/60 shadow-premium p-8 h-full">
-                        <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center justify-between mb-5">
                             <h3 className="text-xl heading-premium text-slate-900 uppercase">
-                                Recomendaciones
+                                {sidebarMode === 'manual' ? 'Alta manual' : 'Recomendaciones'}
                             </h3>
                             <button 
                                 onClick={() => setShowFilters(!showFilters)}
@@ -922,8 +939,33 @@ const PlanningView = () => {
                             </button>
                         </div>
 
+                        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-1 ring-1 ring-slate-200/70">
+                            <button
+                                type="button"
+                                onClick={() => setSidebarMode('sugerencias')}
+                                className={`rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    sidebarMode === 'sugerencias'
+                                        ? 'bg-white text-slate-950 shadow-sm'
+                                        : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                            >
+                                Sugerencias
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSidebarMode('manual')}
+                                className={`rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    sidebarMode === 'manual'
+                                        ? 'bg-orange-600 text-white shadow-sm'
+                                        : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                            >
+                                Manual
+                            </button>
+                        </div>
+
                         {showFilters && (
-                            <div className="mb-6 p-4 bg-slate-50/50 rounded-2xl border border-slate-200/60 space-y-3 animate-in slide-in-from-top duration-300">
+                            <div className="mb-5 mt-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-200/60 space-y-3 animate-in slide-in-from-top duration-300">
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
                                     Filtrar por tipo:
                                 </p>
@@ -976,75 +1018,183 @@ const PlanningView = () => {
                             </div>
                         )}
 
-                        <div className="space-y-4">
-                            {filteredSuggestions.length === 0 ? (
-                                <div className="text-center py-10 opacity-50">
-                                    <MapPin size={32} className="mx-auto text-slate-200 mb-2" />
-                                    <p className="text-xs font-bold text-slate-400 uppercase">
-                                        Sin resultados
-                                    </p>
-                                </div>
-                            ) : (
-                                filteredSuggestions
-                                    .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                                    .map((stop) => (
-                                        <div
-                                            key={stop.id}
-                                            className={`group p-4 rounded-2xl border transition-all duration-300 ${routes.length > 0 && routes.every(r => r.status === 'Completada')
-                                                    ? 'opacity-50 grayscale cursor-not-allowed bg-slate-100 border-slate-200'
-                                                    : 'border-slate-50 bg-slate-50/50 hover:bg-white hover:border-orange-200 hover:shadow-lg'
-                                                }`}
-                                        >
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex items-start space-x-3">
-                                                    <div className="w-11 h-11 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 shadow-inner group-hover:scale-110 group-hover:bg-orange-600 group-hover:text-white transition-all duration-500">
-                                                        {stop.type === 'Institución' ? <Building2 size={20} /> :
-                                                            stop.type === 'Supermercado' ? <ShoppingCart size={20} /> :
-                                                                <MapPin size={20} />}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-black text-slate-900 line-clamp-1">
-                                                            {stop.name}
-                                                        </p>
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 tracking-widest">
-                                                            {stop.type || 'Sugerencia'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    disabled={routes.length > 0 && routes.every(r => r.status === 'Completada')}
-                                                    onClick={() => {
-                                                        const activeRoutes = routes.filter(r => r.status !== 'Completada')
-                                                        setSelectedSuggestion(stop)
-                                                        setStopFormData({ route_id: activeRoutes.length > 0 ? activeRoutes[0].id.toString() : '' })
-                                                        setIsStopModalOpen(true)
-                                                    }}
-                                                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all opacity-0 group-hover:opacity-100 ${routes.length > 0 && routes.every(r => r.status === 'Completada')
-                                                            ? 'text-slate-300 cursor-not-allowed'
-                                                            : 'text-slate-300 hover:text-orange-600 hover:bg-orange-50'
+                        {sidebarMode === 'sugerencias' ? (
+                            <>
+                                <div className="space-y-4">
+                                    {filteredSuggestions.length === 0 ? (
+                                        <div className="text-center py-10 opacity-50">
+                                            <MapPin size={32} className="mx-auto text-slate-200 mb-2" />
+                                            <p className="text-xs font-bold text-slate-400 uppercase">
+                                                Sin resultados
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        filteredSuggestions
+                                            .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                            .map((stop) => (
+                                                <div
+                                                    key={stop.id}
+                                                    className={`group p-4 rounded-2xl border transition-all duration-300 ${routes.length > 0 && routes.every(r => r.status === 'Completada')
+                                                            ? 'opacity-50 grayscale cursor-not-allowed bg-slate-100 border-slate-200'
+                                                            : 'border-slate-50 bg-slate-50/50 hover:bg-white hover:border-orange-200 hover:shadow-lg'
                                                         }`}
                                                 >
-                                                    <Plus size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))
-                            )}
-                        </div>
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-start space-x-3">
+                                                            <div className="w-11 h-11 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 shadow-inner group-hover:scale-110 group-hover:bg-orange-600 group-hover:text-white transition-all duration-500">
+                                                                {stop.type === 'Institución' ? <Building2 size={20} /> :
+                                                                    stop.type === 'Supermercado' ? <ShoppingCart size={20} /> :
+                                                                        <MapPin size={20} />}
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-sm font-black text-slate-900 line-clamp-1">
+                                                                    {stop.name}
+                                                                </p>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 tracking-widest">
+                                                                    {stop.type || 'Sugerencia'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            disabled={routes.length > 0 && routes.every(r => r.status === 'Completada')}
+                                                            onClick={() => {
+                                                                const activeRoutes = routes.filter(r => r.status !== 'Completada')
+                                                                setSelectedSuggestion(stop)
+                                                                setStopFormData({ route_id: activeRoutes.length > 0 ? activeRoutes[0].id.toString() : '' })
+                                                                setIsStopModalOpen(true)
+                                                            }}
+                                                            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all opacity-0 group-hover:opacity-100 ${routes.length > 0 && routes.every(r => r.status === 'Completada')
+                                                                    ? 'text-slate-300 cursor-not-allowed'
+                                                                    : 'text-slate-300 hover:text-orange-600 hover:bg-orange-50'
+                                                                }`}
+                                                        >
+                                                            <Plus size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                    )}
+                                </div>
 
-                        <div className="mt-10 pt-8 border-t border-slate-100 flex flex-col gap-3">
-                            <button
-                                onClick={async () => {
-                                    const colonies = await window.api.db.list('colonies')
-                                    setManualOptions(colonies)
-                                    setManualAddData({ type: 'Colonia', id: colonies[0]?.id?.toString() || '' })
-                                    setIsManualAddOpen(true)
-                                }}
-                                className="w-full py-4 px-6 bg-slate-50 rounded-2xl text-[11px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Search size={14} /> Buscar Manualmente
-                            </button>
-                        </div>
+                                <div className="mt-10 pt-8 border-t border-slate-100 flex flex-col gap-3">
+                                    <button
+                                        onClick={async () => {
+                                            await openManualFlow('Colonia')
+                                        }}
+                                        className="w-full py-4 px-6 bg-orange-600 rounded-2xl text-[11px] font-black text-white uppercase tracking-widest hover:bg-orange-700 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Plus size={14} /> Agregar parada manual
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="space-y-4 rounded-[2rem] border border-slate-700/70 bg-slate-950/70 p-4 shadow-inner shadow-slate-950/30">
+                                    <div className="space-y-3">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em]">Tipo de punto</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {['Colonia', 'Institución', 'Supermercado'].map((type) => (
+                                                <button
+                                                    key={type}
+                                                    type="button"
+                                                    onClick={() => loadManualOptions(type)}
+                                                    className={`rounded-xl px-3 py-3 text-[10px] font-black uppercase tracking-tight transition-all ${
+                                                        manualAddData.type === type
+                                                        ? 'bg-orange-600 text-white shadow-lg'
+                                                        : 'bg-slate-900/80 text-slate-300 ring-1 ring-slate-700 hover:bg-slate-800'
+                                                    }`}
+                                                >
+                                                    {type}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em]">Buscar destino</label>
+                                        <div className="relative">
+                                            <Search size={16} className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" />
+                                            <input
+                                                type="text"
+                                                value={manualSearchTerm}
+                                                onChange={(e) => setManualSearchTerm(e.target.value)}
+                                                placeholder="Escribe nombre, dirección o referencia..."
+                                                className="w-full rounded-2xl border border-slate-700 bg-slate-900/90 py-4 pl-12 pr-4 text-sm font-bold text-slate-100 outline-none placeholder:text-slate-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="max-h-56 space-y-2 overflow-y-auto">
+                                        {filteredManualOptions.slice(0, 6).map((opt) => {
+                                            const isSelected = manualAddData.id === opt.id.toString()
+                                            return (
+                                                <button
+                                                    key={opt.id}
+                                                    type="button"
+                                                    onClick={() => setManualAddData({ ...manualAddData, id: opt.id.toString() })}
+                                                    className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
+                                                        isSelected
+                                                        ? 'border-orange-400 bg-orange-500/10 shadow-sm'
+                                                        : 'border-slate-700/50 bg-slate-900/60 hover:border-slate-600 hover:bg-slate-900'
+                                                    }`}
+                                                >
+                                                    <p className="text-sm font-black text-slate-100 line-clamp-1">{opt.name}</p>
+                                                    <p className="mt-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                                        {opt.address || opt.collection_point || 'Sin detalle'}
+                                                    </p>
+                                                </button>
+                                            )
+                                        })}
+                                        {manualOptions.length === 0 && (
+                                            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-4 text-center text-sm font-medium text-slate-400">
+                                                Primero elige un tipo de punto para cargar opciones.
+                                            </div>
+                                        )}
+                                        {manualOptions.length > 0 && filteredManualOptions.length === 0 && (
+                                            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-4 text-center text-sm font-medium text-slate-400">
+                                                No encontramos coincidencias.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            await openManualFlow(manualAddData.type)
+                                        }}
+                                        className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-100 transition-all hover:bg-slate-800"
+                                    >
+                                        Abrir formulario completo
+                                    </button>
+                                </div>
+
+                                <div className="mt-8 rounded-[2rem] border border-slate-700/70 bg-slate-950/70 p-4 shadow-inner shadow-slate-950/30">
+                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Ruta asignada</label>
+                                    <div className="mt-3 relative">
+                                        <select
+                                            required
+                                            value={stopFormData.route_id}
+                                            onChange={(e) => setStopFormData({ ...stopFormData, route_id: e.target.value })}
+                                            className="w-full appearance-none rounded-2xl border border-slate-700 bg-slate-900/90 px-5 py-4 text-sm font-bold text-slate-100 outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10"
+                                        >
+                                            {routes.filter(r => r.status !== 'Completada').map(r => (
+                                                <option key={r.id} value={r.id}>{r.truck_name} ({r.driver_name})</option>
+                                            ))}
+                                        </select>
+                                        <div className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-slate-500">
+                                            <ChevronRight size={16} className="rotate-90" />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={manualOptions.length === 0 || routes.length === 0 || !manualAddData.id || !stopFormData.route_id}
+                                        className="mt-4 w-full rounded-2xl bg-orange-600 px-4 py-4 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:bg-orange-700 disabled:opacity-50"
+                                    >
+                                        Agregar parada
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -1058,22 +1208,53 @@ const PlanningView = () => {
                             </p>
                         </div>
                     ) : routes.length === 0 ? (
-                        <div className="bg-slate-50/50 border-4 border-dashed border-slate-100 rounded-[3rem] p-24 text-center">
-                            <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-premium flex items-center justify-center mx-auto mb-8 animate-bounce">
-                                <Truck size={40} className="text-slate-200" />
+                        <div className="relative overflow-hidden rounded-[3rem] border border-dashed border-slate-200 bg-white/70 p-8 shadow-premium">
+                            <div className="absolute right-0 top-0 h-40 w-40 translate-x-1/3 -translate-y-1/3 rounded-full bg-orange-50 blur-3xl" />
+                            <div className="relative mx-auto flex max-w-2xl flex-col items-center text-center">
+                                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-[2rem] bg-slate-950 text-white shadow-2xl shadow-slate-950/10">
+                                    <Truck size={34} />
+                                </div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-orange-600">
+                                    Jornada sin rutas
+                                </p>
+                                <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
+                                    {dayName}
+                                </h2>
+                                <p className="mt-3 max-w-xl text-base font-medium leading-relaxed text-slate-500">
+                                    Todavía no hay una ruta creada para este día. Puedes abrir la creación manual y dejar lista la unidad con su chofer antes de empezar a cargar paradas.
+                                </p>
+
+                                <div className="mt-8 grid w-full grid-cols-1 gap-4 rounded-[2rem] border border-slate-100 bg-slate-50/80 p-5 sm:grid-cols-3">
+                                    <div className="rounded-2xl bg-white p-4 text-left shadow-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Fecha</p>
+                                        <p className="mt-2 text-sm font-black text-slate-950">{selectedDate}</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-white p-4 text-left shadow-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Unidades</p>
+                                        <p className="mt-2 text-sm font-black text-slate-950">{trucks.length} disponibles</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-white p-4 text-left shadow-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Choferes</p>
+                                        <p className="mt-2 text-sm font-black text-slate-950">{drivers.length} disponibles</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                                    <button
+                                        onClick={handleCreateRoute}
+                                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-orange-600 px-8 py-4 text-sm font-black text-white shadow-2xl shadow-orange-200 transition-all hover:bg-orange-700 active:scale-95"
+                                    >
+                                        <Plus size={18} />
+                                        Crear ruta manual
+                                    </button>
+                                    <button
+                                        onClick={() => setIsMonthlyModalOpen(true)}
+                                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-8 py-4 text-sm font-black text-slate-700 transition-all hover:bg-slate-50"
+                                    >
+                                        Generar plan mensual
+                                    </button>
+                                </div>
                             </div>
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
-                                Sin rutas para este día
-                            </h2>
-                            <p className="text-slate-500 font-medium max-w-sm mx-auto mb-10 text-lg">
-                                Crea una ruta manual o genera la planeación mensual desde el botón superior.
-                            </p>
-                            <button
-                                onClick={handleCreateRoute}
-                                className="bg-orange-600 text-white px-10 py-5 rounded-2xl font-black shadow-2xl shadow-orange-200 hover:bg-orange-700 transition-all active:scale-95 text-lg"
-                            >
-                                Crear ruta manual
-                            </button>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-12">
@@ -1440,104 +1621,127 @@ const PlanningView = () => {
             {/* Modal de creacion de ruta */}
             {isRouteModalOpen && createPortal(
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300">
-                    <div className="bg-white/90 backdrop-blur-2xl rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.2)] border border-white/50 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-500">
-                        <div className="p-10 border-b border-slate-100/50 relative bg-gradient-to-br from-white to-orange-50/30">
-                            <div className="w-14 h-14 bg-orange-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-orange-600/30">
-                                <Truck size={28} className="text-white" />
+                    <div className="bg-white/92 backdrop-blur-2xl rounded-[3rem] shadow-[0_30px_90px_rgba(15,23,42,0.18)] border border-white/60 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-500">
+                        <div className="relative overflow-hidden border-b border-slate-100/70 bg-gradient-to-br from-white via-orange-50/30 to-white px-8 py-7">
+                            <div className="absolute right-0 top-0 h-32 w-32 translate-x-1/3 -translate-y-1/3 rounded-full bg-orange-100/60 blur-3xl pointer-events-none" />
+                            <div className="relative flex items-start gap-4">
+                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-600 shadow-lg shadow-orange-600/30 shrink-0">
+                                    <Truck size={26} className="text-white" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-orange-600">Creación diaria</p>
+                                    <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                                        Nueva <span className="text-orange-600">ruta</span>
+                                    </h3>
+                                    <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">Elige la fecha, la unidad y el chofer responsable para dejar la ruta lista.</p>
+                                </div>
                             </div>
-                            <h3 className="text-3xl font-black text-slate-900 tracking-tighter">
-                                Nueva <span className="text-orange-600">ruta</span>
-                            </h3>
-                            <p className="text-slate-400 text-sm font-medium mt-1">Elige fecha, unidad y chofer.</p>
                             <button
                                 onClick={() => setIsRouteModalOpen(false)}
-                                className="absolute top-10 right-10 text-slate-300 hover:text-slate-900 transition-colors w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl"
+                                className="absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-2xl text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-900"
                             >
                                 <X size={20} />
                             </button>
                         </div>
-                        <form onSubmit={submitRouteForm} className="p-10 space-y-6">
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                                    Fecha de la Ruta
-                                </label>
-                                <input
-                                    type="date"
-                                    required
-                                    value={routeFormData.date}
-                                    onChange={(e) => setRouteFormData({ ...routeFormData, date: e.target.value })}
-                                    className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900 cursor-pointer"
-                                />
-                            </div>
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                                    Unidad Logística
-                                </label>
-                                <div className="relative group">
-                                    <select
+                        <form onSubmit={submitRouteForm} className="max-h-[calc(100vh-180px)] space-y-6 overflow-y-auto p-8">
+                            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                                        Fecha de la Ruta
+                                    </label>
+                                    <input
+                                        type="date"
                                         required
-                                        value={routeFormData.truck_id}
-                                        onChange={(e) => setRouteFormData({ ...routeFormData, truck_id: e.target.value })}
-                                        className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900 cursor-pointer appearance-none"
-                                    >
-                                        {trucks.map(truck => (
-                                            <option key={truck.id} value={truck.id}>{truck.name} - {truck.capacity_kg} kg</option>
+                                        value={routeFormData.date}
+                                        onChange={(e) => setRouteFormData({ ...routeFormData, date: e.target.value })}
+                                        className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900 cursor-pointer"
+                                    />
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                                        Tipo Operativo
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['Entrega', 'Recolección', 'Institucional', 'Caridad'].map((type) => (
+                                            <button
+                                                key={type}
+                                                type="button"
+                                                onClick={() => setRouteFormData({ ...routeFormData, type })}
+                                                className={`min-h-12 rounded-xl px-3 text-[11px] font-black uppercase tracking-widest transition-all ${
+                                                    routeFormData.type === type
+                                                    ? 'bg-slate-900 text-white shadow-lg'
+                                                    : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                                {type}
+                                            </button>
                                         ))}
-                                    </select>
-                                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                        <ChevronRight size={16} className="rotate-90" />
                                     </div>
                                 </div>
                             </div>
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                                    Chofer Responsable
-                                </label>
-                                <div className="relative group">
-                                    <select
-                                        required
-                                        value={routeFormData.driver_id}
-                                        onChange={(e) => setRouteFormData({ ...routeFormData, driver_id: e.target.value })}
-                                        className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900 cursor-pointer appearance-none"
-                                    >
-                                        {drivers.map(driver => (
-                                            <option key={driver.id} value={driver.id}>{driver.name}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                        <ChevronRight size={16} className="rotate-90" />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                                    Tipo Operativo
-                                </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {['Entrega', 'Recolección', 'Institucional', 'Caridad'].map((type) => (
-                                        <button
-                                            key={type}
-                                            type="button"
-                                            onClick={() => setRouteFormData({ ...routeFormData, type })}
-                                            className={`py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
-                                                routeFormData.type === type 
-                                                ? 'bg-slate-900 text-white shadow-lg' 
-                                                : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
-                                            }`}
+                            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                                        Unidad Logística
+                                    </label>
+                                    <div className="relative group">
+                                        <select
+                                            required
+                                            value={routeFormData.truck_id}
+                                            onChange={(e) => setRouteFormData({ ...routeFormData, truck_id: e.target.value })}
+                                            className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900 cursor-pointer appearance-none"
                                         >
-                                            {type}
-                                        </button>
-                                    ))}
+                                            {trucks.map(truck => (
+                                                <option key={truck.id} value={truck.id}>{truck.name} - {truck.capacity_kg} kg</option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                            <ChevronRight size={16} className="rotate-90" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                                        Chofer Responsable
+                                    </label>
+                                    <div className="relative group">
+                                        <select
+                                            required
+                                            value={routeFormData.driver_id}
+                                            onChange={(e) => setRouteFormData({ ...routeFormData, driver_id: e.target.value })}
+                                            className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900 cursor-pointer appearance-none"
+                                        >
+                                            {drivers.map(driver => (
+                                                <option key={driver.id} value={driver.id}>{driver.name}</option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                            <ChevronRight size={16} className="rotate-90" />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="pt-8 flex items-center gap-4">
+                            <div className="rounded-[2rem] border border-slate-100 bg-slate-50/70 p-4">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Revisión rápida</p>
+                                        <p className="mt-1 text-sm font-medium text-slate-500">La ruta se abrirá en vista diaria para seguir agregando paradas.</p>
+                                    </div>
+                                    <div className="hidden rounded-2xl bg-white px-4 py-3 text-right shadow-sm sm:block">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Inicio</p>
+                                        <p className="mt-1 text-sm font-black text-slate-950">{routeFormData.date || selectedDate}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-4 pt-2">
                                 <button
                                     type="button"
                                     onClick={() => setIsRouteModalOpen(false)}
                                     className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-100 rounded-2xl transition-all uppercase text-[11px] tracking-widest"
                                 >
-                                    Cerrar
+                                    Cancelar
                                 </button>
                                 <button
                                     type="submit"
@@ -1638,22 +1842,29 @@ const PlanningView = () => {
             {/* Modal para agregar parada manual */}
             {isManualAddOpen && createPortal(
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300">
-                    <div className="bg-white/90 backdrop-blur-2xl rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.2)] border border-white/50 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-500">
-                        <div className="p-10 border-b border-slate-100/50 relative bg-gradient-to-br from-white to-slate-50">
-                            <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center mb-6 shadow-xl">
-                                <Search size={28} className="text-white" />
+                    <div className="bg-white/92 backdrop-blur-2xl rounded-[3rem] shadow-[0_30px_90px_rgba(15,23,42,0.18)] border border-white/60 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-500">
+                        <div className="relative overflow-hidden border-b border-slate-100/70 bg-gradient-to-br from-white via-slate-50 to-white px-8 py-7">
+                            <div className="absolute right-0 top-0 h-32 w-32 translate-x-1/3 -translate-y-1/3 rounded-full bg-orange-100/60 blur-3xl pointer-events-none" />
+                            <div className="relative flex items-start gap-4">
+                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 shadow-xl shadow-slate-900/20 shrink-0">
+                                    <Search size={26} className="text-white" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-orange-600">Carga manual</p>
+                                    <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                                        Agregar <span className="text-orange-600">parada</span>
+                                    </h3>
+                                    <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">Busca el punto por nombre, elige la ruta destino y lo agregamos sin depender de sugerencias.</p>
+                                </div>
                             </div>
-                            <h3 className="text-3xl font-black text-slate-900 tracking-tighter">
-                                Registro <span className="text-orange-600">Manual</span>
-                            </h3>
                             <button
                                 onClick={() => setIsManualAddOpen(false)}
-                                className="absolute top-10 right-10 text-slate-300 hover:text-slate-900 transition-colors w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl"
+                                className="absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-2xl text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-900"
                             >
                                 <X size={20} />
                             </button>
                         </div>
-                        <form onSubmit={handleManualSubmit} className="p-10 space-y-6">
+                        <form onSubmit={handleManualSubmit} className="max-h-[calc(100vh-180px)] space-y-6 overflow-y-auto p-8">
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Tipo de Punto</label>
                                 <div className="grid grid-cols-3 gap-2">
@@ -1662,7 +1873,7 @@ const PlanningView = () => {
                                             key={type}
                                             type="button"
                                             onClick={() => loadManualOptions(type)}
-                                            className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all ${
+                                            className={`min-h-12 rounded-xl px-3 text-[10px] font-black uppercase tracking-tight transition-all ${
                                                 manualAddData.type === type 
                                                 ? 'bg-orange-600 text-white shadow-lg' 
                                                 : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
@@ -1675,21 +1886,56 @@ const PlanningView = () => {
                             </div>
 
                             <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Seleccionar Destino</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Buscar Destino</label>
                                 <div className="relative">
-                                    <select
-                                        required
-                                        value={manualAddData.id}
-                                        onChange={(e) => setManualAddData({ ...manualAddData, id: e.target.value })}
-                                        className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 transition-all outline-none font-bold text-slate-900 cursor-pointer appearance-none"
-                                    >
-                                        {manualOptions.map(opt => (
-                                            <option key={opt.id} value={opt.id}>{opt.name}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                        <ChevronRight size={16} className="rotate-90" />
-                                    </div>
+                                    <Search size={16} className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        value={manualSearchTerm}
+                                        onChange={(e) => setManualSearchTerm(e.target.value)}
+                                        placeholder="Escribe nombre, dirección o referencia..."
+                                        className="w-full px-12 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none font-bold text-slate-900"
+                                    />
+                                </div>
+                                <div className="max-h-64 space-y-2 overflow-y-auto rounded-[2rem] border border-slate-100 bg-slate-50/70 p-3">
+                                    {filteredManualOptions.map((opt) => {
+                                        const isSelected = manualAddData.id === opt.id.toString()
+                                        const detail = opt.address || opt.collection_point || opt.fixed_day || 'Sin detalle'
+                                        return (
+                                            <button
+                                                key={opt.id}
+                                                type="button"
+                                                onClick={() => setManualAddData({ ...manualAddData, id: opt.id.toString() })}
+                                                className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
+                                                    isSelected
+                                                    ? 'border-orange-200 bg-orange-50 shadow-sm'
+                                                    : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-black text-slate-950 line-clamp-1">{opt.name}</p>
+                                                        <p className="mt-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{detail}</p>
+                                                    </div>
+                                                    {isSelected && (
+                                                        <span className="rounded-full bg-orange-600 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-white">
+                                                            Seleccionado
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        )
+                                    })}
+                                    {manualOptions.length === 0 && (
+                                        <div className="p-6 text-center text-slate-400 font-medium">
+                                            No hay puntos cargados para este tipo.
+                                        </div>
+                                    )}
+                                    {manualOptions.length > 0 && filteredManualOptions.length === 0 && (
+                                        <div className="p-6 text-center text-slate-400 font-medium">
+                                            No encontramos coincidencias.
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1712,7 +1958,7 @@ const PlanningView = () => {
                                 </div>
                             </div>
 
-                            <div className="pt-8 flex items-center gap-4">
+                            <div className="pt-2 flex items-center gap-4">
                                 <button
                                     type="button"
                                     onClick={() => setIsManualAddOpen(false)}
@@ -1722,7 +1968,7 @@ const PlanningView = () => {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={manualOptions.length === 0 || routes.length === 0}
+                                    disabled={manualOptions.length === 0 || routes.length === 0 || !manualAddData.id}
                                     className="flex-[2] bg-slate-900 text-white py-5 rounded-2xl font-black shadow-xl shadow-slate-900/20 hover:bg-slate-800 transition-all active:scale-[0.98] disabled:opacity-50 uppercase text-[11px] tracking-widest"
                                 >
                                     Agregar

@@ -195,7 +195,7 @@ const DashboardView = () => {
               to="/planeacion"
               className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-orange-700"
             >
-              Generar planeación
+              Plan mensual
               <ArrowRight size={18} />
             </Link>
             <Link
@@ -245,9 +245,9 @@ const DashboardView = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-5 xl:col-span-2">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-black text-slate-950">Trabajo pendiente</h2>
+              <h2 className="text-lg font-black text-slate-950">Recomendaciones operativas</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Lo que conviene resolver antes de generar o enviar rutas.
+                Lo que conviene atender antes de generar o enviar rutas.
               </p>
             </div>
             <ClipboardList className="text-slate-300" size={24} />

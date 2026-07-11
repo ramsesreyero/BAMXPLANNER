@@ -49,6 +49,44 @@ export function registerGoogleMapsHandlers() {
     }
   })
 
+  ipcMain.handle('google-maps:reverse-geocode', async (_, lat: number, lng: number) => {
+    try {
+      const apiKey = getApiKey()
+      if (!apiKey) {
+        throw new Error('Google Maps no está configurado.')
+      }
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return { success: false, error: 'Coordenadas inválidas.' }
+      }
+
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${encodeURIComponent(`${lat},${lng}`)}&key=${apiKey}`
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Google Reverse Geocoding respondió con código ${response.status}`)
+      }
+
+      const data = await response.json()
+      if (data.status !== 'OK' || !data.results?.length) {
+        return {
+          success: false,
+          error: data.error_message || 'No se pudo resolver la dirección desde el punto marcado.'
+        }
+      }
+
+      const result = data.results[0]
+      return {
+        success: true,
+        address: result.formatted_address,
+        lat,
+        lng
+      }
+    } catch (error: any) {
+      console.error('Error in Google Maps Reverse Geocode IPC:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
   // Verify API Key
   ipcMain.handle('google-maps:verify-key', async (_, key: string) => {
     try {

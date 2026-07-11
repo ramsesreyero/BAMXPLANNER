@@ -33,6 +33,7 @@ const api = {
   },
   googleMaps: {
     geocode: (address: string) => ipcRenderer.invoke('google-maps:geocode', address),
+    reverseGeocode: (lat: number, lng: number) => ipcRenderer.invoke('google-maps:reverse-geocode', lat, lng),
     getDistanceMatrix: (points: { lat: number; lng: number }[]) => 
       ipcRenderer.invoke('google-maps:distance-matrix', points),
     getDirections: (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, waypoints?: { lat: number; lng: number }[]) => 

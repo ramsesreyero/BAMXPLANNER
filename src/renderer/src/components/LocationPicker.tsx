@@ -41,8 +41,8 @@ const LeafletMap: React.FC<{
   lat: number
   lng: number
   color: string
-  onLocationChange: (location: { lat: number; lng: number }) => void
-}> = ({ lat, lng, color, onLocationChange }) => {
+  onPointSelected: (location: { lat: number; lng: number }) => void | Promise<void>
+}> = ({ lat, lng, color, onPointSelected }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
   const markerRef = useRef<any>(null)
@@ -80,13 +80,13 @@ const LeafletMap: React.FC<{
 
       marker.on('dragend', () => {
         const pos = marker.getLatLng()
-        onLocationChange({ lat: pos.lat, lng: pos.lng })
+        onPointSelected({ lat: pos.lat, lng: pos.lng })
       })
 
       map.on('click', (e: any) => {
         const pos = e.latlng
         marker.setLatLng(pos)
-        onLocationChange({ lat: pos.lat, lng: pos.lng })
+        onPointSelected({ lat: pos.lat, lng: pos.lng })
       })
 
       mapRef.current = map
@@ -151,6 +151,21 @@ async function nominatimGeocode(address: string): Promise<{ lat: number; lng: nu
   }
 }
 
+async function nominatimReverseGeocode(lat: number, lng: number): Promise<{ lat: number; lng: number; address: string } | null> {
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&format=jsonv2`
+  const response = await fetch(url, {
+    headers: { 'Accept-Language': 'es', 'User-Agent': 'BAMX-Nuevo-Laredo-Planner/1.0' }
+  })
+  if (!response.ok) return null
+  const data = await response.json()
+  if (!data?.display_name) return null
+  return {
+    lat,
+    lng,
+    address: data.display_name
+  }
+}
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export const LocationPicker: React.FC<LocationPickerProps> = ({
   addressLabel = 'Dirección / ubicación',
@@ -171,6 +186,35 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
   const [showManualCoordinates, setShowManualCoordinates] = useState(false)
   const selected = Boolean(lat && lng)
   const color = toneClasses[tone]
+
+  const resolvePointSelection = async (nextLat: number, nextLng: number) => {
+    try {
+      let resolvedAddress: string | null = null
+
+      if (mapMode === 'google') {
+        const result = await window.api.googleMaps.reverseGeocode(nextLat, nextLng)
+        if (result.success && result.address) {
+          resolvedAddress = result.address
+        }
+      }
+
+      if (!resolvedAddress) {
+        const fallback = await nominatimReverseGeocode(nextLat, nextLng)
+        resolvedAddress = fallback?.address || null
+      }
+
+      if (resolvedAddress) {
+        onAddressChange(resolvedAddress)
+        onLocationChange({ address: resolvedAddress, lat: nextLat, lng: nextLng })
+        return
+      }
+
+      onLocationChange({ lat: nextLat, lng: nextLng })
+    } catch (error) {
+      console.error('Error resolving point selection:', error)
+      onLocationChange({ lat: nextLat, lng: nextLng })
+    }
+  }
 
   // ── Google marker helper ──
   const setGoogleMarker = (google: typeof window.google, position: google.maps.LatLngLiteral) => {
@@ -193,7 +237,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
       markerRef.current.addListener('dragend', () => {
         const pos = markerRef.current?.getPosition()
         if (!pos) return
-        onLocationChange({ lat: pos.lat(), lng: pos.lng() })
+        void resolvePointSelection(pos.lat(), pos.lng())
       })
     } else {
       markerRef.current.setPosition(position)
@@ -234,7 +278,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
               if (!event.latLng) return
               const position = { lat: event.latLng.lat(), lng: event.latLng.lng() }
               setGoogleMarker(google, position)
-              onLocationChange(position)
+              void resolvePointSelection(position.lat, position.lng)
             })
             return
           } catch {
@@ -402,7 +446,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
                 lat={lat}
                 lng={lng}
                 color={color.leafletColor}
-                onLocationChange={onLocationChange}
+                onPointSelected={(position) => void resolvePointSelection(position.lat, position.lng)}
               />
             </div>
           )}

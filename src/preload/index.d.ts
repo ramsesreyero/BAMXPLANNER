@@ -31,6 +31,7 @@ declare global {
       };
       googleMaps: {
         geocode: (address: string) => Promise<{ success: boolean; address?: string; lat?: number; lng?: number; error?: string }>;
+        reverseGeocode: (lat: number, lng: number) => Promise<{ success: boolean; address?: string; lat?: number; lng?: number; error?: string }>;
         getDistanceMatrix: (points: { lat: number; lng: number }[]) => Promise<{ distances: number[][]; durations: number[][]; success: boolean; error?: string }>;
         getDirections: (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, waypoints?: { lat: number; lng: number }[]) => Promise<{ data: any; success: boolean; error?: string }>;
         verifyKey: (key: string) => Promise<{ success: boolean; message: string }>;
